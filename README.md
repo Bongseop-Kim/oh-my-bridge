@@ -18,20 +18,27 @@ MCP → SubAgent → Hook → Skill → Plugin 레이어를 순서대로 쌓아 
 ├─────────────────────────────────────────┤
 │  MCP Server (도구 등록)                    │  Codex CLI를 네이티브 도구로 등록
 ├─────────────────────────────────────────┤
-│  Hook (모니터링)                           │  비용 로깅, 에러 감지, fallback
+│  Hook (인터셉션 + 모니터링)                  │  코드 편집 자동 라우팅, 비용 로깅, 에러 감지, fallback
 ├─────────────────────────────────────────┤
 │  Plugin (패키징)                           │  위 전체를 설치 가능한 단위로 번들링
 └─────────────────────────────────────────┘
 ```
 
-**실행 흐름:**
+**실행 흐름 — 경로 A: 자동 인터셉션 (모든 코드 편집에 자동 적용)**
 
 ```
-사용자 요청
-  → Superpowers subagent-driven-development 스킬 트리거
+Claude → Edit|Write 시도
+  → PreToolUse Hook (codex-interceptor.sh)
+  → codex -q -a full-auto --writable-roots {cwd}
+  → 성공: deny (Codex가 이미 수정) / 실패: allow (Claude 네이티브 폴백)
+```
+
+**실행 흐름 — 경로 B: 명시적 스킬 (리뷰 파이프라인 포함)**
+
+```
+/subagent-driven-development implement X
   → codex-generator SubAgent 디스패치 (haiku 오케스트레이터)
-  → codex CLI 실행 (codex -q -a full-auto ...)
-  → GPT-5.3-codex 코드 생성 (파일 직접 수정)
+  → codex -q -a full-auto ... (GPT-5.3-codex 코드 생성)
   → 결과 검증
   → Spec Reviewer + Code Quality Reviewer (Claude 네이티브)
 ```
@@ -71,9 +78,9 @@ codex mcp-server --help
 ```
 
 설치 후 자동으로:
-- `.mcp.json` — `mcp__codex__codex` 도구 등록
+- `.mcp.json` — `mcp__plugin_oh-my-bridge_codex__codex` 도구 등록
 - `agents/codex-generator.md` — SubAgent 자동 등록
-- `hooks/hooks.json` — PostToolUse 훅 바인딩
+- `hooks/hooks.json` — PreToolUse(코드 편집 인터셉션) + PostToolUse(로깅/fallback) 훅 바인딩
 
 ### Phase 3: 스킬 오버라이드 (Superpowers 필요)
 
@@ -102,6 +109,7 @@ cp skills/subagent-driven-development/implementer-prompt.md ~/.claude/skills/sub
 
 ```
 oh-my-bridge/
+├── CLAUDE.md                          프로젝트 컨텍스트 (명령어, gotcha)
 ├── LICENSE
 ├── .claude-plugin/
 │   └── plugin.json                    Phase 4: 플러그인 메타데이터
@@ -110,8 +118,9 @@ oh-my-bridge/
 │   └── codex-generator.md             Phase 1b: SubAgent 정의
 ├── hooks/
 │   ├── hooks.json                     Phase 2: Hook 이벤트 바인딩
+│   ├── codex-interceptor.sh           Phase 2: PreToolUse 코드 편집 자동 인터셉션
 │   ├── log-codex-usage.sh             Phase 2: JSONL 사용량 로깅
-│   └── codex-fallback.sh             Phase 2: 장애 감지 + fallback 주입
+│   └── codex-fallback.sh              Phase 2: 장애 감지 + fallback 주입
 ├── skills/
 │   └── subagent-driven-development/
 │       ├── SKILL.md                   Phase 3: 워크플로우 오버라이드
@@ -129,7 +138,7 @@ oh-my-bridge/
 `/plugin install` 후 Claude Code 세션에서:
 
 ```
-사용 가능한 도구 목록에 mcp__codex__codex가 표시되는지 확인
+사용 가능한 도구 목록에 mcp__plugin_oh-my-bridge_codex__codex가 표시되는지 확인
 ```
 
 ### Phase 1b — SubAgent 등록 확인
@@ -140,7 +149,13 @@ oh-my-bridge/
 
 ### Phase 2 — 훅 동작 확인
 
-Codex MCP 호출 후:
+**PreToolUse 인터셉션 확인**: `.js`, `.ts`, `.py` 등 코드 파일을 편집 요청 시:
+
+```
+"Routing to Codex CLI..." 스피너가 표시되는지 확인
+```
+
+**PostToolUse 로그 확인**:
 
 ```bash
 # 로그 확인
@@ -162,13 +177,23 @@ cat ~/.claude/skills/subagent-driven-development/SKILL.md | head -5
 
 ### E2E 테스트
 
-간단한 코드 생성 태스크 실행:
+**경로 A — 자동 인터셉션 확인**:
 
 ```
-implement a hello world function in hello.js
+hello.js 파일에 hello world 함수를 추가해줘
 ```
 
-전체 흐름 확인:
+확인 항목:
+1. "Routing to Codex CLI..." 스피너 표시됨
+2. Codex CLI가 파일을 직접 수정함 (Claude 네이티브 편집 없음)
+
+**경로 B — 명시적 스킬 트리거 확인**:
+
+```
+/subagent-driven-development implement a hello world function in hello.js
+```
+
+확인 항목:
 1. codex-generator SubAgent 디스패치됨
 2. Codex CLI 실행됨 (GPT-5.3-codex 코드 생성)
 3. `~/.claude/logs/codex-usage.log`에 항목 추가됨
