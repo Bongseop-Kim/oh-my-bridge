@@ -23,9 +23,9 @@ codex --version  # 설치 확인
 # 3. Claude Code에서: /plugin update oh-my-bridge
 # 4. Claude Code 재시작
 
-# 캐시 직접 동기화 (버전 업 전 급할 때, 현재 버전: 1.0.7)
-cp hooks/codex-interceptor.sh ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/1.0.7/hooks/
-cp hooks/hooks.json ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/1.0.7/hooks/
+# 캐시 직접 동기화 (버전 업 전 급할 때, 현재 버전: 1.0.8)
+cp hooks/codex-interceptor.sh ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/1.0.8/hooks/
+cp hooks/hooks.json ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/1.0.8/hooks/
 
 # 사용 로그
 tail -5 ~/.claude/logs/codex-usage.log | jq .

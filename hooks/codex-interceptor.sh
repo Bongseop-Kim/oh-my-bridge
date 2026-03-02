@@ -82,7 +82,7 @@ if [ "$TOOL_NAME" = "Edit" ]; then
 
   CODEX_EXIT=0
   ${TIMEOUT_CMD:+$TIMEOUT_CMD 170} codex exec --full-auto -C "$CWD" "$CODEX_PROMPT" \
-    2>"$TEMP_ERR" || CODEX_EXIT=$?
+    >/dev/null 2>"$TEMP_ERR" || CODEX_EXIT=$?
 
 # ── Write ─────────────────────────────────────────────────────────────────────
 elif [ "$TOOL_NAME" = "Write" ]; then
@@ -103,7 +103,7 @@ elif [ "$TOOL_NAME" = "Write" ]; then
 
   CODEX_EXIT=0
   ${TIMEOUT_CMD:+$TIMEOUT_CMD 170} codex exec --full-auto -C "$CWD" "$CODEX_PROMPT" \
-    2>"$TEMP_ERR" || CODEX_EXIT=$?
+    >/dev/null 2>"$TEMP_ERR" || CODEX_EXIT=$?
 
 else
   rm -f "$TEMP_ERR"
