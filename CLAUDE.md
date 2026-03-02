@@ -1,6 +1,6 @@
 # oh-my-bridge — CLAUDE.md
 
-코드 파일 Edit|Write 시 자동으로 Codex CLI가 대신 실행된다.
+Claude가 코드 생성 작업을 자율 판단하여 Codex CLI(MCP)에 위임하는 skill 기반 브리지 플러그인 (v2.0.0).
 
 ## 전제조건
 
@@ -13,9 +13,11 @@ codex --version  # 설치 확인
 ## 핵심 명령어
 
 ```bash
-# 스킬 오버라이드 배포 (/plugin install 이후 별도 실행 필요)
-./setup.sh
-./setup.sh --undo
+# skill 설치 (Claude Code에서 실행)
+/oh-my-bridge:setup
+
+# skill 제거
+/oh-my-bridge:uninstall
 
 # 재배포 순서
 # 1. ./bump-version.sh <new-version>  # 3개 파일 한 번에 업데이트
@@ -23,33 +25,32 @@ codex --version  # 설치 확인
 # 3. Claude Code에서: /plugin update oh-my-bridge
 # 4. Claude Code 재시작
 
-# 캐시 직접 동기화 (버전 업 전 급할 때, 현재 버전: 1.0.9)
-cp hooks/codex-interceptor.sh ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/1.0.9/hooks/
-cp hooks/hooks.json ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/1.0.9/hooks/
+# 캐시 직접 동기화 (버전 업 전 급할 때, 현재 버전: 2.0.0)
+cp skills/code-routing.md ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/2.0.0/skills/code-routing.md
 
 # 사용 로그
 tail -5 ~/.claude/logs/codex-usage.log | jq .
 ```
 
-## 훅 동작 규칙 (필수)
+## Skill 동작 방식
 
-**Edit/Write 호출 후 "Routing to Codex CLI..." 훅이 실행되면:**
-- Codex가 파일을 직접 수정했으므로 Claude의 내부 파일 해시가 무효화됨
-- 같은 파일에 추가 편집이 필요할 경우 **반드시 Read 도구로 파일을 다시 읽어야 함**
-- Re-read 없이 Edit를 재시도하면 "File has been modified since read" 에러 발생
+`/oh-my-bridge:setup` 실행 후 Claude는 `~/.claude/skills/oh-my-bridge/SKILL.md`를 세션마다 자동으로 읽는다.
+
+- **코드 생성 작업** (새 파일, 함수/클래스 구현, 리팩토링) → `mcp__plugin_oh-my-bridge_codex__codex` 호출
+- **단순 편집** (오타, 한 줄 변경, config, 문서) → Claude 네이티브 Edit/Write 직접 사용
+
+MCP 호출 후에는 `Read` 도구로 생성 파일을 확인하고 결과를 보고한다.
 
 ## Gotchas
 
-- **훅은 세션 시작 시 스냅샷 로드** — 수정 후 Claude Code 재시작 필요
-- **Edit 프롬프트는 `echo` 방식** — `printf` 쓰면 `%s` `%d` 포맷 문자 오해석
-- **Write는 훅이 직접 파일 기록** — Codex 프롬프트 경유 없음 (Claude가 이미 내용 결정)
-- **`/plugin install`은 `skills/` 미배포** — `setup.sh` 별도 실행 필요
+- **Skill은 세션 시작 시 로드** — 설치 후 Claude Code 재시작 필요
 - **마켓플레이스는 로컬 디렉토리** — GitHub push 불필요, `/plugin update`만으로 충분
+- **`/plugin install`은 `skills/` 미배포** — `/oh-my-bridge:setup` 별도 실행 필요
 
 ## 동작 확인
 
 ```bash
 /mcp     # plugin:oh-my-bridge:codex · ✔ connected
 /agents  # oh-my-bridge:codex-generator · haiku
-# 코드 파일 편집 시 "Routing to Codex CLI..." 스피너 확인
+head -3 ~/.claude/skills/oh-my-bridge/SKILL.md  # name: oh-my-bridge:code-routing
 ```
