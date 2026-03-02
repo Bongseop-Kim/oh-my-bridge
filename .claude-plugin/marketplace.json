@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Claude Code + Codex CLI 외부 모델 통합 브리지",
-    "version": "1.0.3"
+    "version": "1.0.4"
   },
   "plugins": [
     {
       "name": "oh-my-bridge",
       "source": "./",
       "description": "Claude Code + Codex CLI 외부 모델 통합 브리지. Claude가 판단하고, GPT가 생성한다.",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "author": {
         "name": "gimbongseob"
       },
