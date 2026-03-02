@@ -1,7 +1,9 @@
 {
-  "codex": {
-    "type": "stdio",
-    "command": "codex",
-    "args": ["-m", "gpt-5.3-codex", "mcp-server"]
+  "mcpServers": {
+    "codex": {
+      "type": "stdio",
+      "command": "codex",
+      "args": ["-m", "gpt-5.3-codex", "mcp-server"]
+    }
   }
 }
