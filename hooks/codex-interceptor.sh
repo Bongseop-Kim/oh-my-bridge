@@ -35,9 +35,19 @@ if ! command -v codex &>/dev/null; then
   exit 0
 fi
 
-# 코드 파일 확장자 필터 — 바이너리·락파일·설정파일 등 제외
+# 경로 트래버설 검증 — ../ 패턴 차단
+if echo "$FILE_PATH" | grep -q '\.\.'; then
+  exit 0
+fi
+
+# 코드 파일 확장자 필터 — 블랙리스트 방식 (바이너리·락파일·이미지·미디어 제외)
 EXT="${FILE_PATH##*.}"
-if ! echo "$EXT" | grep -qE '^(js|jsx|ts|tsx|py|go|rs|java|kt|swift|c|cpp|h|hpp|rb|php|sh|bash|css|scss|html|vue|svelte)$'; then
+BASENAME=$(basename "$FILE_PATH")
+# 확장자가 없는 경우(EXT == BASENAME) 또는 바이너리/락파일이면 패스스루
+if [[ "$EXT" == "$BASENAME" ]]; then
+  exit 0
+fi
+if echo "$EXT" | grep -qiE '^(png|jpg|jpeg|gif|svg|ico|webp|bmp|tiff|mp4|mp3|wav|mov|avi|zip|tar|gz|bz2|xz|7z|pdf|doc|docx|xls|xlsx|ppt|pptx|bin|exe|dll|so|dylib|class|jar|wasm|lock|sum|snap|min\.js|min\.css|map)$'; then
   exit 0
 fi
 
@@ -67,7 +77,7 @@ if [ "$TOOL_NAME" = "Edit" ]; then
   rm -f "$TEMP_PROMPT"
 
   CODEX_EXIT=0
-  codex exec --full-auto -C "$CWD" "$CODEX_PROMPT" \
+  timeout 170 codex exec --full-auto -C "$CWD" "$CODEX_PROMPT" \
     2>"$TEMP_ERR" || CODEX_EXIT=$?
 
 # ── Write ─────────────────────────────────────────────────────────────────────
@@ -87,7 +97,7 @@ elif [ "$TOOL_NAME" = "Write" ]; then
   rm -f "$TEMP_PROMPT"
 
   CODEX_EXIT=0
-  codex exec --full-auto -C "$CWD" "$CODEX_PROMPT" \
+  timeout 170 codex exec --full-auto -C "$CWD" "$CODEX_PROMPT" \
     2>"$TEMP_ERR" || CODEX_EXIT=$?
 
 else

@@ -18,15 +18,14 @@ codex --version  # 설치 확인
 ./setup.sh --undo
 
 # 재배포 순서
-# 1. .claude-plugin/plugin.json 버전 수정
-# 2. .claude-plugin/marketplace.json 버전 수정 (2곳: metadata.version, plugins[0].version)
-# 3. git commit
-# 4. Claude Code에서: /plugin update oh-my-bridge
-# 5. Claude Code 재시작
+# 1. ./bump-version.sh <new-version>  # 3개 파일 한 번에 업데이트
+# 2. git commit
+# 3. Claude Code에서: /plugin update oh-my-bridge
+# 4. Claude Code 재시작
 
-# 캐시 직접 동기화 (버전 업 전 급할 때, 현재 버전: 1.0.4)
-cp hooks/codex-interceptor.sh ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/1.0.4/hooks/
-cp hooks/hooks.json ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/1.0.4/hooks/
+# 캐시 직접 동기화 (버전 업 전 급할 때, 현재 버전: 1.0.6)
+cp hooks/codex-interceptor.sh ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/1.0.6/hooks/
+cp hooks/hooks.json ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/1.0.6/hooks/
 
 # 사용 로그
 tail -5 ~/.claude/logs/codex-usage.log | jq .

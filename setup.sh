@@ -49,8 +49,9 @@ mkdir -p "$SKILL_DST"
 cp "${SKILL_SRC}/SKILL.md" "$SKILL_DST/SKILL.md"
 cp "${SKILL_SRC}/implementer-prompt.md" "$SKILL_DST/implementer-prompt.md"
 
-# Copy reviewer prompts from Superpowers cache if available
+# Copy reviewer prompts from Superpowers cache — required for full workflow
 SUPERPOWERS_CACHE=$(find "${HOME}/.claude/plugins/cache" -type d -name "superpowers" 2>/dev/null | head -1)
+MISSING_REVIEWERS=()
 if [[ -n "$SUPERPOWERS_CACHE" ]]; then
   SP_SKILL_DIR=$(find "$SUPERPOWERS_CACHE" -type d -name "subagent-driven-development" 2>/dev/null | head -1)
   if [[ -n "$SP_SKILL_DIR" ]]; then
@@ -58,9 +59,26 @@ if [[ -n "$SUPERPOWERS_CACHE" ]]; then
       if [[ -f "${SP_SKILL_DIR}/${REVIEWER_PROMPT}" ]]; then
         cp "${SP_SKILL_DIR}/${REVIEWER_PROMPT}" "${SKILL_DST}/${REVIEWER_PROMPT}"
         echo "Copied reviewer prompt from Superpowers: $REVIEWER_PROMPT"
+      else
+        MISSING_REVIEWERS+=("$REVIEWER_PROMPT")
       fi
     done
+  else
+    MISSING_REVIEWERS+=(spec-reviewer-prompt.md code-quality-reviewer-prompt.md)
   fi
+else
+  MISSING_REVIEWERS+=(spec-reviewer-prompt.md code-quality-reviewer-prompt.md)
+fi
+
+if [[ ${#MISSING_REVIEWERS[@]} -gt 0 ]]; then
+  echo ""
+  echo "WARNING: Reviewer prompts not found — Spec/Code-Quality review steps will be unavailable:"
+  for f in "${MISSING_REVIEWERS[@]}"; do
+    echo "  - $f"
+  done
+  echo "  Install Superpowers plugin first, then re-run ./setup.sh"
+  echo ""
+  exit 1
 fi
 
 echo ""
@@ -70,5 +88,3 @@ echo "Contents:"
 ls -1 "$SKILL_DST"
 echo ""
 echo "To undo: ./setup.sh --undo"
-echo "Note: Reviewer prompts not found in Superpowers cache will need to be"
-echo "      copied manually from ~/.claude/plugins/cache/.../subagent-driven-development/"
