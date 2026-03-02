@@ -35,6 +35,9 @@ if ! command -v codex &>/dev/null; then
   exit 0
 fi
 
+# timeout 명령어 탐지 — macOS: gtimeout(coreutils), Linux: timeout, 없으면 미사용
+TIMEOUT_CMD=$(command -v gtimeout 2>/dev/null || command -v timeout 2>/dev/null || echo "")
+
 # 경로 트래버설 검증 — ../ 패턴 차단
 if echo "$FILE_PATH" | grep -q '\.\.'; then
   exit 0
@@ -71,13 +74,14 @@ if [ "$TOOL_NAME" = "Edit" ]; then
     echo "$NEW_STRING"
     echo ""
     echo "Make only this exact change. Do not modify anything else in the file."
+    echo "Do not modify any other files. Only change ${FILE_PATH}."
   } > "$TEMP_PROMPT"
 
   CODEX_PROMPT=$(cat "$TEMP_PROMPT")
   rm -f "$TEMP_PROMPT"
 
   CODEX_EXIT=0
-  timeout 170 codex exec --full-auto -C "$CWD" "$CODEX_PROMPT" \
+  ${TIMEOUT_CMD:+$TIMEOUT_CMD 170} codex exec --full-auto -C "$CWD" "$CODEX_PROMPT" \
     2>"$TEMP_ERR" || CODEX_EXIT=$?
 
 # ── Write ─────────────────────────────────────────────────────────────────────
@@ -88,6 +92,7 @@ elif [ "$TOOL_NAME" = "Write" ]; then
   {
     echo "Create or overwrite the file ${FILE_PATH} with exactly the following content."
     echo "Do not add, remove, or change any characters."
+    echo "Do not modify any other files. Only change ${FILE_PATH}."
     echo ""
     echo "CONTENT:"
     echo "$CONTENT"
@@ -97,7 +102,7 @@ elif [ "$TOOL_NAME" = "Write" ]; then
   rm -f "$TEMP_PROMPT"
 
   CODEX_EXIT=0
-  timeout 170 codex exec --full-auto -C "$CWD" "$CODEX_PROMPT" \
+  ${TIMEOUT_CMD:+$TIMEOUT_CMD 170} codex exec --full-auto -C "$CWD" "$CODEX_PROMPT" \
     2>"$TEMP_ERR" || CODEX_EXIT=$?
 
 else
@@ -112,7 +117,7 @@ if [ "$CODEX_EXIT" -eq 0 ]; then
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
-      permissionDecisionReason: "Codex CLI가 편집을 완료했습니다. Claude 네이티브 편집은 필요하지 않습니다."
+      permissionDecisionReason: "Codex CLI가 편집을 완료했습니다. 같은 파일에 추가 편집이 필요하면 반드시 Read 도구로 파일을 다시 읽어주세요."
     }
   }'
 else
