@@ -31,6 +31,13 @@ cp hooks/hooks.json ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/1.0.9/hook
 tail -5 ~/.claude/logs/codex-usage.log | jq .
 ```
 
+## 훅 동작 규칙 (필수)
+
+**Edit/Write 호출 후 "Routing to Codex CLI..." 훅이 실행되면:**
+- Codex가 파일을 직접 수정했으므로 Claude의 내부 파일 해시가 무효화됨
+- 같은 파일에 추가 편집이 필요할 경우 **반드시 Read 도구로 파일을 다시 읽어야 함**
+- Re-read 없이 Edit를 재시도하면 "File has been modified since read" 에러 발생
+
 ## Gotchas
 
 - **훅은 세션 시작 시 스냅샷 로드** — 수정 후 Claude Code 재시작 필요

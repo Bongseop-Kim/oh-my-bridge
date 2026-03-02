@@ -117,7 +117,7 @@ if [ "$CODEX_EXIT" -eq 0 ]; then
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
-      permissionDecisionReason: "Codex CLI가 편집을 완료했습니다. 같은 파일에 추가 편집이 필요하면 반드시 Read 도구로 파일을 다시 읽어주세요."
+      permissionDecisionReason: "⚠️ [REQUIRED ACTION] Codex가 파일을 직접 수정했습니다. Claude의 내부 파일 해시가 무효화되었습니다. 같은 파일에 추가 편집이 필요하면 반드시 Read 도구로 파일을 다시 읽은 후 Edit 하세요. Re-read 없이 Edit를 재시도하면 'File has been modified since read' 에러가 발생합니다."
     }
   }'
 else
