@@ -8,6 +8,22 @@
 #   Codex 실패 → permissionDecision: allow (Claude 네이티브 편집으로 폴백)
 # Dependencies: jq, codex
 
+LOG_FILE="${HOME}/.claude/logs/codex-usage.log"
+
+_log() {
+  local status="$1" op="$2" file="$3" exit_code="${4:-0}" error="${5:-}"
+  mkdir -p "${HOME}/.claude/logs"
+  jq -n \
+    --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+    --arg tool "codex-interceptor ($op)" \
+    --arg status "$status" \
+    --arg exit_code "$exit_code" \
+    --arg error "$error" \
+    --arg file "$file" \
+    '{timestamp: $ts, tool: $tool, file: $file, status: $status, exit_code: $exit_code, error: $error}' \
+    >> "$LOG_FILE"
+}
+
 INPUT=$(cat)
 
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // ""')
@@ -51,31 +67,42 @@ if [ "$TOOL_NAME" = "Edit" ]; then
   rm -f "$TEMP_PROMPT"
 
   CODEX_EXIT=0
-  (cd "$CWD" && codex -q -a full-auto --writable-roots "$CWD" "$CODEX_PROMPT") \
+  codex exec --full-auto -C "$CWD" "$CODEX_PROMPT" \
     2>"$TEMP_ERR" || CODEX_EXIT=$?
 
 # ── Write ─────────────────────────────────────────────────────────────────────
 elif [ "$TOOL_NAME" = "Write" ]; then
   CONTENT=$(echo "$INPUT" | jq -r '.tool_input.content // ""')
 
-  # Claude가 이미 최종 내용을 결정했으므로 훅에서 직접 파일에 기록
-  # (Codex에게 파일 경로를 읽으라는 모호한 프롬프트 방식 제거)
+  TEMP_PROMPT=$(mktemp /tmp/ombridge-prompt-XXXXXX)
+  {
+    echo "Create or overwrite the file ${FILE_PATH} with exactly the following content."
+    echo "Do not add, remove, or change any characters."
+    echo ""
+    echo "CONTENT:"
+    echo "$CONTENT"
+  } > "$TEMP_PROMPT"
+
+  CODEX_PROMPT=$(cat "$TEMP_PROMPT")
+  rm -f "$TEMP_PROMPT"
+
   CODEX_EXIT=0
-  printf '%s' "$CONTENT" > "$FILE_PATH" 2>"$TEMP_ERR" || CODEX_EXIT=$?
+  codex exec --full-auto -C "$CWD" "$CODEX_PROMPT" \
+    2>"$TEMP_ERR" || CODEX_EXIT=$?
 
 else
   rm -f "$TEMP_ERR"
   exit 0
 fi
 
-# ── 결과 처리 ──────────────────────────────────────────────────────────────────
+# ── 결과 처리 (Edit / Write 공통) ────────────────────────────────────────────────
 if [ "$CODEX_EXIT" -eq 0 ]; then
   rm -f "$TEMP_ERR"
   jq -n '{
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
-      permissionDecisionReason: "Codex CLI가 파일 수정을 완료했습니다. Claude 네이티브 편집은 필요하지 않습니다."
+      permissionDecisionReason: "Codex CLI가 편집을 완료했습니다. Claude 네이티브 편집은 필요하지 않습니다."
     }
   }'
 else
