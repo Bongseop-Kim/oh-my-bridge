@@ -5,27 +5,37 @@ description: Use when you are about to write code, create new files, or implemen
 
 # Code Generation Routing
 
-When you are about to write or modify code, apply these rules to decide whether to delegate to Codex CLI via MCP or handle it yourself.
+## Why Codex for code, Claude for orchestration
+
+This is not about capability — it's about model personality:
+
+| Model | Personality | Prompt style |
+|-------|-------------|--------------|
+| Claude | Mechanics-driven | Detailed checklists, step-by-step procedures, "do exactly this" |
+| Codex (GPT) | Principle-driven | Concise goals, autonomous execution, "achieve this, figure out how" |
+
+Code generation is Codex's domain. Claude's role is to translate user intent into a precise prompt, then verify the result. Claude orchestrates — Codex generates.
 
 ---
 
-## Delegate to Codex (call `mcp__plugin_oh-my-bridge_codex__codex`)
+## Routing rule: output is code → delegate to Codex
 
-- Creating a new file with more than ~20 lines of logic
-- Implementing a function, class, or module from scratch
-- Refactoring an existing file (restructuring, renaming, reorganizing)
-- Generating boilerplate (tests, stubs, scaffolding, API handlers)
-- Writing algorithmic or business-logic code in any language
+**Delegate to Codex** when the result of the task is runnable code:
 
-## Handle directly (use Edit/Write/Bash as normal)
+- New file with any logic
+- New function, class, method, or module
+- Refactoring (restructuring, reorganizing, logic changes)
+- Boilerplate generation (tests, stubs, scaffolding, API handlers)
+- Adding or modifying logic in an existing file
 
-- Typo or wording fix (1–3 lines)
-- Updating a constant, version number, or config value
-- Editing documentation or Markdown files
-- Renaming a single variable across a small file
+**Handle directly** when the change contains no logic:
+
+- Typo, wording, or comment fix
+- Config value, constant, or version number update
+- Documentation or Markdown edit
 - Deleting or moving files
 
-**Rule of thumb**: If you can write it correctly in a single Edit call, do it yourself. If it requires thinking through logic or structure, delegate.
+**When in doubt: delegate.** Claude's natural tendency is to handle things directly — resist it. The default for anything touching logic is Codex.
 
 ---
 

@@ -1,6 +1,6 @@
 # oh-my-bridge — CLAUDE.md
 
-Claude가 코드 생성 작업을 자율 판단하여 Codex CLI(MCP)에 위임하는 skill 기반 브리지 플러그인 (v2.0.0).
+Claude가 코드 생성 작업을 자율 판단하여 Codex CLI(MCP)에 위임하는 skill 기반 브리지 플러그인 (v2.0.1).
 
 ## 전제조건
 
@@ -25,8 +25,8 @@ codex --version  # 설치 확인
 # 3. Claude Code에서: /plugin update oh-my-bridge
 # 4. Claude Code 재시작
 
-# 캐시 직접 동기화 (버전 업 전 급할 때, 현재 버전: 2.0.0)
-cp skills/code-routing.md ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/2.0.0/skills/code-routing.md
+# 캐시 직접 동기화 (버전 업 전 급할 때, 현재 버전: 2.0.1)
+cp skills/code-routing.md ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/2.0.1/skills/code-routing.md
 
 # 사용 로그
 tail -5 ~/.claude/logs/codex-usage.log | jq .
