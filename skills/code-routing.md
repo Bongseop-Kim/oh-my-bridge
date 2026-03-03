@@ -1,6 +1,6 @@
 ---
 name: oh-my-bridge:code-routing
-description: Use when you are about to write code, create new files, or implement features. Determines whether to delegate code generation to Codex CLI via MCP or handle directly.
+description: "ALWAYS invoke before any code change — routes between Codex (logic/new code) and Claude-native (trivial edits). Do not skip regardless of context length."
 ---
 
 # Code Generation Routing
