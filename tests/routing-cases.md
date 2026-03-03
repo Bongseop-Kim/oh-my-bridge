@@ -64,8 +64,8 @@ bash tests/setup-test-project.sh
 
 | ID | 카테고리 | 프롬프트 | 예상 | 왜 이 케이스인가 |
 |----|---------|---------|------|----------------|
-| D-01 | 버그 수정 | "src/utils/format.ts의 formatDate가 invalid Date 입력 시 크래시 나. 고쳐줘." | Codex | "fix" 동사지만 로직 변경. 가장 흔한 실사용 패턴. |
-| D-02 | 버그 수정 | "src/index.ts에서 PORT 환경변수가 무시되고 항상 3000이 쓰여. 수정해줘." | Codex | 단 한 줄 수정일 수 있음. 규모가 작다고 Claude가 직접 처리할 위험. |
+| D-01 | 버그 수정 | "src/utils/format.ts의 formatDate가 invalid Date 입력 시 크래시 나. 고쳐줘." | Claude | "fix" 동사지만 로직 변경 규모가 작음. 소규모 버그 수정은 Claude 직접 처리. |
+| D-02 | 버그 수정 | "src/index.ts에서 PORT 환경변수가 무시되고 항상 3000이 쓰여. 수정해줘." | Claude | 한 줄 수정. B-04 패턴과 동일 (상수/env 값 변경 = Claude). |
 | D-03 | 모호한 동사 | "src/utils/format.ts의 formatDate 함수 개선해줘." | Codex | "개선" = 로직 변경 가능성 높음. 하지만 구체적 지시 없음. |
 | D-04 | 모호한 동사 | "src/services/user.service.ts 정리해줘." | Codex | "정리" = 리팩토링(Codex)일 수도, 불필요한 공백 제거(Claude)일 수도. |
 | D-05 | 기존 파일 + 함수 추가 | "src/utils/format.ts에 formatPhoneNumber 함수 추가해줘. 한국 형식 010-XXXX-XXXX로 포맷팅." | Codex | 새 파일 생성이 아닌 기존 파일에 함수 추가. A군과 다른 패턴. |
@@ -112,16 +112,16 @@ bash tests/setup-test-project.sh
 | C-01 | Claude | Claude | ✅ | |
 | C-02 | Codex | codex | ✅ | |
 | C-03 | Claude | claude | ✅ | |
-| C-04 | Claude | codex | ❌ | 3회 중 2회 codex 호출 |
+| C-04 | Claude | codex | ❌ | codex(2회 호출), claude(1회 호출) |
 | C-05 | Codex | codex | ✅ | |
 | C-06 | Codex | codex | ✅ | |
 | C-07 | Codex | codex | ✅ | |
-| D-01 | Codex | | | |
-| D-02 | Codex | | | |
-| D-03 | Codex | | | |
-| D-04 | Codex | | | |
-| D-05 | Codex | | | |
-| D-06 | Claude | | | |
+| D-01 | Claude | claude | ✅ | |
+| D-02 | Claude | claude | ✅ | |
+| D-03 | Codex | codex | ✅ | |
+| D-04 | Codex | codex | ✅ | |
+| D-05 | Codex | codex | ✅ | |
+| D-06 | Claude | claude | ✅ | |
 
 ---
 
