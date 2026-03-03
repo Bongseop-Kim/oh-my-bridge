@@ -61,6 +61,26 @@ Use the 7-Section format and call `mcp__plugin_oh-my-bridge_codex__codex`:
 7. OUTPUT FORMAT: [File paths, format, naming conventions]
 ```
 
+### CONTEXT section: file paths, not inline content
+
+Codex runs with `workspace-write` sandbox and reads files directly. **Do not embed file contents inline.**
+
+```
+# ❌ BAD — bloated prompt, poor readability, parsing artifacts
+3. CONTEXT:
+=== pages/login.tsx (full content) ===
+import { useLogin } from "@refinedev/core";
+... (300 lines)
+
+# ✅ GOOD — Codex reads files autonomously
+3. CONTEXT:
+- apps/admin/src/pages/login.tsx — fat page to extract from
+- apps/admin/src/features/claims/api/claims-mapper.ts — reference mapper pattern
+- packages/shared/src/types/dto/admin-order.ts — AdminOrderListRowDTO type
+```
+
+Exception: paste short type definitions inline when field-level accuracy is critical (e.g., strict TypeScript contracts).
+
 ```
 mcp__plugin_oh-my-bridge_codex__codex({
   prompt: "<7-Section delegation prompt>",
