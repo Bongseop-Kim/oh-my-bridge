@@ -210,3 +210,83 @@ C-04: "import 문 3개를 추가해줘 (cors, helmet, dotenv)"
 import 문은 로직이 없어 Claude가 직접 처리해야 하는데 Codex로 라우팅됐다. False Positive — 결과 품질 문제는 없지만 불필요한 Codex 호출이 발생했다. 스킬에 "로직 없는 import/export 추가 = Claude 직접 처리" 규칙을 보강했다.
 
 96%는 충분히 실용적인 수치다. 훅이 제공했던 100% 보장 대신, 약간의 비결정성을 받아들이는 대신 UX와 아키텍처 일관성을 얻었다.
+
+---
+
+## 다음 문제: Plan mode와의 통합
+
+skill 기반으로 전환한 뒤 새로운 한계가 드러났다. Claude Code의 `EnterPlanMode`를 사용하면 — 즉 계획을 먼저 세우고 승인을 받은 뒤 실행하는 워크플로우에서 — oh-my-bridge가 전혀 작동하지 않는 것이다.
+
+### 왜 Plan mode에서 code-routing이 트리거되지 않는가
+
+스킬 description은 이렇게 되어 있다:
+
+```
+Use when you are about to write code, create new files, or implement features.
+```
+
+**"about to write code"** — 실행 직전 상태를 의미한다. Plan mode는 실행 이전 단계다.
+
+```
+[Plan mode]
+사용자 요청 → 탐색/분석 → 계획 수립 → 승인 대기
+                                          ↕ 여기서 멈춤
+[Implementation mode]
+승인 → 코드 생성  ← "about to write code" 조건이 충족되는 시점
+```
+
+Plan mode에서 Claude는 "코드를 작성 직전"이 아니라 "코드 작성 방법을 계획 중"이다. 스킬의 트리거 조건이 의미론적으로 false가 된다. 또한 Plan mode에서 MCP를 호출하는 것은 사용자가 계획을 승인하기 전에 코드가 생성된다는 뜻이므로, 설계 의도에도 맞지 않는다.
+
+### ExitPlanMode 직후에도 트리거되지 않는 이유: 순환 의존성
+
+문제는 Plan mode에서 끝나지 않는다. ExitPlanMode 이후에도 oh-my-bridge가 트리거되지 않는다.
+
+이유는 순환 구조에 있다:
+
+```
+Plan mode에서 code-routing 미실행
+        ↓
+플랜이 Claude-native 도구로 기술됨
+("src/auth.ts를 Edit 도구로 수정한다")
+        ↓
+ExitPlanMode → "플랜에 따라 실행"
+        ↓
+Claude-native로 구현
+        ↓
+oh-my-bridge 트리거 기회 없음
+        ↓
+(다음 플랜도 code-routing 없이 작성됨)
+```
+
+code-routing이 라우팅 결정을 해야 하는 시점(plan 작성)에 작동하지 않기 때문에, 플랜 자체가 "Claude가 한다"는 전제로 쓰인다. ExitPlanMode 이후 Claude는 이 플랜을 따르므로 라우팅 판단 기회가 없다.
+
+ExitPlanMode가 보내는 시스템 메시지("You can now make edits, run tools, and take actions")는 강한 실행 신호다. Claude는 "실행해"라는 지시를 받고 플랜 단계를 직접 수행하기 시작한다. 스킬 체크가 들어갈 틈이 없다.
+
+### 해결: routing pass
+
+강제 호출은 oh-my-bridge의 설계 철학과 맞지 않는다. 이 스킬은 Claude가 모델 성격 차이를 이해하고 **스스로 판단**하도록 설계되어 있다. "무조건 Codex"가 아니라 "의도에 따라 Claude가 결정"이 핵심이다.
+
+해결책은 **판단 기회를 만드는 것**이다. 강제가 아니라 라우팅 검토 단계를 삽입한다.
+
+`CLAUDE.md`에 한 줄:
+
+```
+ExitPlanMode 이후 첫 번째 단계 실행 전에,
+oh-my-bridge:code-routing 라우팅 규칙을 각 단계에 적용하여
+Codex 위임 여부를 판단한다.
+```
+
+결과:
+
+```
+ExitPlanMode
+    ↓
+[라우팅 패스 — Claude의 판단]
+  1단계: src/auth.ts JWT 구현 → 로직 있음 → Codex
+  2단계: config.json 값 변경  → 로직 없음 → Claude 직접
+  3단계: middleware 구현       → 로직 있음 → Codex
+    ↓
+oh-my-bridge 라우팅 규칙 적용, Codex 자연스럽게 호출
+```
+
+플랜 실행이 시작되기 전 Claude가 각 단계를 oh-my-bridge의 라우팅 기준으로 한 번 훑는다. Codex를 강제하는 것이 아니라, 판단이 일어날 공간을 만드는 것이다. 판단은 여전히 Claude가 한다.

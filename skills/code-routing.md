@@ -39,6 +39,14 @@ Code generation is Codex's domain. Claude's role is to translate user intent int
 
 ---
 
+## After ExitPlanMode
+
+Before executing the first step of an approved plan, apply the routing rules above to each step and decide: Codex or direct?
+
+Do not follow the plan's implicit implementation assumptions — plans are written before this skill is consulted. Re-evaluate each code-generating step now.
+
+---
+
 ## How to delegate
 
 Use the 7-Section format and call `mcp__plugin_oh-my-bridge_codex__codex`:
