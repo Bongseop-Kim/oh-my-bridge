@@ -3,7 +3,12 @@
     "codex": {
       "type": "stdio",
       "command": "codex",
-      "args": ["-m", "gpt-5.4", "mcp-server"]
+      "args": ["mcp-server"]
+    },
+    "gemini": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["./mcp-servers/gemini/index.js"]
     }
   }
 }

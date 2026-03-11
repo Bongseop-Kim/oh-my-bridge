@@ -49,7 +49,9 @@ Do not follow the plan's implicit implementation assumptions — plans are writt
 
 ## How to delegate
 
-Use the 7-Section format and call `mcp__plugin_oh-my-bridge_codex__codex`:
+**Before calling any MCP tool, invoke `oh-my-bridge:model-routing` to classify the task category and select the appropriate model.** Do not default to Codex — the model is determined by the routing skill.
+
+Use the 7-Section format and call the MCP tool returned by `oh-my-bridge:model-routing`:
 
 ```
 1. TASK: [One atomic, specific goal sentence]
@@ -94,7 +96,7 @@ mcp__plugin_oh-my-bridge_codex__codex({
 
 1. Use `Read` to verify generated files exist and look correct.
 2. Report to the user: file list + key decisions made.
-3. If MCP fails: fall back to Claude-native Edit/Write. Do not retry Codex.
+3. If MCP fails: follow the fallback chain in `oh-my-bridge:model-routing`. Do not retry the same model.
 
 ## Security
 

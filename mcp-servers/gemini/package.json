@@ -1,0 +1,14 @@
+{
+  "name": "@oh-my-bridge/gemini-mcp",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Local MCP server that proxies Gemini CLI via subprocess",
+  "type": "module",
+  "bin": {
+    "oh-my-bridge-gemini-mcp": "./index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.0",
+    "zod": "^3.24.1"
+  }
+}
