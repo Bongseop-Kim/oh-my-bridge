@@ -1,6 +1,6 @@
 # oh-my-bridge — CLAUDE.md
 
-Claude가 코드 생성 작업을 자율 판단하여 적합한 AI 모델(Codex/Gemini)에 위임하는 skill 기반 브리지 플러그인 (v2.2.0).
+Claude가 코드 생성 작업을 자율 판단하여 적합한 AI 모델(Codex/Gemini)에 위임하는 skill 기반 브리지 플러그인 (v2.3.0).
 
 ## 작업 관점 기준 (CRITICAL)
 
@@ -41,8 +41,8 @@ gemini --version
 # 4. (2분 대기) Claude Code에서: /plugin update oh-my-bridge
 # 5. Claude Code 재시작
 
-# 캐시 직접 동기화 (버전 업 전 급할 때, 현재 버전: 2.2.0)
-cp skills/code-routing.md ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/2.2.0/skills/code-routing.md
+# 캐시 직접 동기화 (버전 업 전 급할 때, 현재 버전: 2.3.0)
+cp skills/code-routing.md ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/2.3.0/skills/code-routing.md
 
 # config 확인/편집
 cat ~/.config/oh-my-bridge/config.json | jq .

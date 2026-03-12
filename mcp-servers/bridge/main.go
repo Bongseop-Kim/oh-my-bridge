@@ -18,7 +18,7 @@ import (
 
 const (
 	serverName           = "oh-my-bridge"
-	serverVersion        = "2.2.0"
+	serverVersion = "2.3.0"
 	defaultGeminiTimeout = 120000
 	defaultCodexTimeout  = 180000
 	maxTimeoutMs         = 300000
