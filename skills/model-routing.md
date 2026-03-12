@@ -12,7 +12,7 @@ After deciding to delegate code generation, use this skill to:
 2. Select the first available model in the fallback chain
 3. Fall back to the next model if the current one fails
 
-Claude is the orchestrator — it does not appear as an external MCP call. When the chain indicates **Claude (직접)**, handle the task natively using Edit/Write tools.
+Claude is the orchestrator — it does not appear as an external MCP call. When the chain indicates **Claude (native)**, handle the task natively using Edit/Write tools.
 
 ---
 
@@ -41,25 +41,37 @@ Work through the chain top to bottom. Stop at the first success.
 
 | Category | 1st | 2nd | 3rd | 4th | 5th |
 |----------|-----|-----|-----|-----|-----|
-| `visual-engineering` | Gemini Pro (high) | Claude (직접) | — | — | — |
-| `ultrabrain` | GPT-5.3 Codex (xhigh) | Gemini Pro (high) | Claude (직접) | — | — |
-| `deep` | GPT-5.3 Codex (medium) | Claude (직접) | Gemini Pro (high) | — | — |
-| `artistry` | Gemini Pro (high) | Claude (직접) | GPT-5.4 | — | — |
-| `quick` | Claude (직접) | Gemini Flash | GPT-5-Nano | — | — |
-| `writing` | Gemini Flash | Claude (직접) | — | — | — |
-| `unspecified-high` | GPT-5.4 (high) | Claude (직접) | — | — | — |
-| `unspecified-low` | Claude (직접) | GPT-5.3 Codex (medium) | Gemini Flash | — | — |
+| `visual-engineering` | Gemini Pro (high) | Claude (native) | — | — | — |
+| `ultrabrain` | GPT-5.3 Codex (xhigh) | Gemini Pro (high) | Claude (native) | — | — |
+| `deep` | GPT-5.3 Codex (medium) | Claude (native) | Gemini Pro (high) | — | — |
+| `artistry` | Gemini Pro (high) | Claude (native) | GPT-5.4 | — | — |
+| `quick` | Claude (native) | Gemini Flash | GPT-5-Nano | — | — |
+| `writing` | Gemini Flash | Claude (native) | — | — | — |
+| `unspecified-high` | GPT-5.4 (high) | Claude (native) | — | — | — |
+| `unspecified-low` | Claude (native) | GPT-5.3 Codex (medium) | Gemini Flash | — | — |
 
 ---
 
 ## MCP Tool Mapping
 
-| Model | MCP | 비고 |
-|-------|-----|------|
-| GPT-5.3 Codex (xhigh/medium) | `mcp__plugin_oh-my-bridge_codex__codex` | OpenAI 공식 MCP |
-| GPT-5.4 (high) / GPT-5-Nano | `mcp__plugin_oh-my-bridge_codex__codex` | OpenAI 공식 MCP |
-| Gemini Pro (high) / Gemini Flash | `mcp__plugin_oh-my-bridge_gemini__gemini` | Gemini CLI 로컬 MCP 브리지 |
-| **Claude (직접)** | — | Edit/Write 직접 처리 (no MCP) |
+| Model | MCP | Notes |
+|-------|-----|-------|
+| GPT-5.3 Codex (xhigh/medium) | `mcp__plugin_oh-my-bridge_codex__codex` | OpenAI official MCP |
+| GPT-5.4 (high) / GPT-5-Nano | `mcp__plugin_oh-my-bridge_codex__codex` | OpenAI official MCP |
+| Gemini Pro (high) / Gemini Flash | `mcp__plugin_oh-my-bridge_gemini__gemini` | Local Gemini CLI MCP bridge |
+| **Claude (native)** | — | Edit/Write directly (no MCP) |
+
+---
+
+## Latency Benchmark
+
+| Method | Simple text response | File creation (tool call) |
+|--------|---------------------|--------------------------|
+| Claude native (Write) | — | ~7s |
+| Gemini Flash (MCP) | ~8s | ~22s |
+| Codex gpt-5.4 (MCP) | — | ~26s |
+
+
 
 ---
 
@@ -72,7 +84,7 @@ Work through the chain top to bottom. Stop at the first success.
    ├─ Call MCP tool with 7-Section prompt
    ├─ Success → done
    └─ Failure (error / timeout / unavailable) → move to next in chain
-4. If Claude (직접):
+4. If Claude (native):
    └─ Handle natively with Edit/Write tools
 5. After completion:
    └─ Report: category used, model used, fallback path taken (if any)
