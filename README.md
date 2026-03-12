@@ -62,7 +62,6 @@ gemini --version
 자동으로 처리됨:
 
 - `~/.claude.json` — bridge MCP 서버 등록
-- `agents/code-orchestrator.md` — SubAgent 등록
 
 ### Phase 2 — Skill 설치
 
@@ -171,8 +170,6 @@ oh-my-bridge/
 │       ├── main.go
 │       ├── go.mod
 │       └── go.sum
-├── agents/
-│   └── code-orchestrator.md   SubAgent (카테고리 분류 + MCP 호출)
 ├── commands/
 │   ├── setup.md             /oh-my-bridge:setup
 │   └── uninstall.md         /oh-my-bridge:uninstall

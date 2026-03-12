@@ -1,6 +1,6 @@
 ---
 name: oh-my-bridge:code-routing
-description: "Multi-model router — classifies tasks and delegates to the best available model (Codex, Gemini, or Claude-native) via CLI without API keys. Invoke before any code change."
+description: "ALWAYS invoke before any code change. Multi-model router — delegates to the best model (Codex, Gemini, or Claude-native) by category. No API keys required."
 ---
 
 # Multi-Model Code Routing
@@ -21,9 +21,20 @@ Claude orchestrates — external models generate.
 
 ---
 
-## Routing rule: output is code → delegate to external model
+## Before executing each plan step
 
-**Delegate to external model** when the result of the task is runnable code:
+For each step in an approved plan, decide **who executes it** — the plan defines _what_, this skill defines _who_:
+
+- Step introduces or modifies logic → delegate to external model (apply category classification below)
+- Step is a trivial edit, config, or doc change → Claude native Edit/Write
+
+This is a routing decision only. Do not alter the plan's scope or goals.
+
+---
+
+## Routing rule: result contains logic → delegate to external model
+
+**Delegate to external model** when the task introduces or changes executable logic:
 
 - New file with any logic
 - New function, class, method, or module
@@ -31,22 +42,19 @@ Claude orchestrates — external models generate.
 - Boilerplate generation (tests, stubs, scaffolding, API handlers)
 - Adding or modifying logic in an existing file
 
-**Handle directly** when the change contains no logic:
+**Handle directly** when the change carries no logic — only data, text, or structure:
 
 - Typo, wording, or comment fix
 - Config value, constant, or version number update
 - Documentation or Markdown edit
 - Deleting or moving files
+- Tailwind className, style attribute, or CSS value change
+- Auto-generated files (e.g. Supabase types, GraphQL schema, OpenAPI clients)
+- Lock file updates (package-lock.json, yarn.lock, bun.lock)
+- Asset file changes (images, fonts, icons, SVG assets)
+- Environment variable additions (.env, .env.local)
 
 **When in doubt: delegate.** Claude's natural tendency is to handle things directly — resist it. The default for anything touching logic is external model delegation.
-
----
-
-## After ExitPlanMode
-
-Before executing the first step of an approved plan, apply the routing rules above to each step and decide: external model or direct?
-
-Do not follow the plan's implicit implementation assumptions — plans are written before this skill is consulted. Re-evaluate each code-generating step now.
 
 ---
 
@@ -77,7 +85,7 @@ Pick the single best-matching category:
 
 Use the 7-Section format:
 
-```
+```text
 1. TASK: [One atomic, specific goal sentence]
 2. EXPECTED OUTCOME: [Success criteria]
 3. CONTEXT: [Current state, relevant file paths/snippets, background]
@@ -91,7 +99,7 @@ Use the 7-Section format:
 
 External models run with `workspace-write` sandbox and read files directly. **Do not embed file contents inline.**
 
-```
+```text
 # ❌ BAD — bloated prompt, poor readability, parsing artifacts
 3. CONTEXT:
 === pages/login.tsx (full content) ===
@@ -128,6 +136,16 @@ mcp__bridge__delegate({
 
 3. If response `action` is `"claude"`: handle the task directly with Claude native Edit/Write.
 4. If MCP call fails: handle the task directly with Claude native Edit/Write. Do not retry.
+
+### Known error cases
+
+If error contains `"outside workspace root"`:
+- `OH_MY_BRIDGE_WORKSPACE_ROOT` is not set or points to the wrong directory
+- Verify the env var is set to the project root, or relaunch MCP server from the correct directory
+
+If error contains `"unknown category"`:
+- Category name does not match `~/.config/oh-my-bridge/config.json`
+- Verify spelling and retry — do not fall back to direct handling until confirmed
 
 ## Security
 

@@ -6,12 +6,13 @@ Claude가 코드 생성 작업을 자율 판단하여 적합한 AI 모델(Codex/
 
 이 repo의 작업은 두 관점이 공존한다. **문제를 받았을 때 반드시 먼저 관점을 판단하라.**
 
-| 관점 | 언제 | 경로 기준 |
-|------|------|----------|
+| 관점       | 언제                                            | 경로 기준                                                      |
+| ---------- | ----------------------------------------------- | -------------------------------------------------------------- |
 | **사용자** | MCP 연결 실패, 플러그인 동작 문제, 설치 후 에러 | `~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/<version>/` |
-| **개발자** | 소스 코드 수정, 기능 추가, 버그 수정 | `/Users/duegosystem/git/oh-my-bridge/` |
+| **개발자** | 소스 코드 수정, 기능 추가, 버그 수정            | `/Users/duegosystem/git/oh-my-bridge/`                         |
 
 **규칙:**
+
 - MCP 연결 실패 → **사용자 관점** → 캐시 경로에서 `/oh-my-bridge:setup` 재실행
 - 소스 변경 후 배포 → **개발자 관점** → repo에서 빌드 후 `bump-version + /plugin update`
 - 절대로 사용자 문제를 개발자 repo 빌드로 해결하지 말 것
@@ -80,11 +81,13 @@ MCP 툴(Codex, Gemini)은 파일 생성 기준 **20–30초** 소요된다. Clau
 
 ```markdown
 # ✅ 올바른 예
+
 \`\`\`bash
 echo "hello"
 \`\`\`
 
 # ❌ 잘못된 예
+
 \`\`\`
 echo "hello"
 \`\`\`
@@ -96,6 +99,5 @@ echo "hello"
 
 ```bash
 /mcp     # bridge · ✔ connected
-/agents  # oh-my-bridge:code-orchestrator · haiku
 head -3 ~/.claude/skills/oh-my-bridge/SKILL.md  # name: oh-my-bridge:code-routing
 ```

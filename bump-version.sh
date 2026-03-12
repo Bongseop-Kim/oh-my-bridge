@@ -59,12 +59,18 @@ fi
 
 # main.go — serverVersion 업데이트
 MAIN_GO_UPDATED=false
-if grep -q "serverVersion" "$MAIN_GO"; then
+if grep -qE "serverVersion *= *\"${CURRENT_VERSION}\"" "$MAIN_GO"; then
   sed_inplace "s/serverVersion *= *\"${CURRENT_VERSION}\"/serverVersion = \"${NEW_VERSION}\"/" "$MAIN_GO"
-  echo "  Updated: $MAIN_GO (serverVersion)"
-  MAIN_GO_UPDATED=true
+  if grep -qE "serverVersion *= *\"${NEW_VERSION}\"" "$MAIN_GO"; then
+    echo "  Updated: $MAIN_GO (serverVersion)"
+    MAIN_GO_UPDATED=true
+  else
+    echo "Error: sed ran but serverVersion = \"${NEW_VERSION}\" not found in $MAIN_GO — aborting" >&2
+    exit 1
+  fi
 else
-  echo "  Warning: serverVersion not found in $MAIN_GO — skipping"
+  echo "Error: serverVersion = \"${CURRENT_VERSION}\" not found in $MAIN_GO — aborting" >&2
+  exit 1
 fi
 
 echo "  Committing and tagging v${NEW_VERSION}..."
