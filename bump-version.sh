@@ -53,11 +53,10 @@ git -C "$SCRIPT_DIR" add \
   "${CLAUDE_MD}"
 git -C "$SCRIPT_DIR" commit -m "chore: bump version to ${NEW_VERSION}"
 git -C "$SCRIPT_DIR" tag "v${NEW_VERSION}"
-git -C "$SCRIPT_DIR" push origin HEAD
-git -C "$SCRIPT_DIR" push origin "v${NEW_VERSION}"
 
 echo ""
-echo "Done. GitHub Actions release triggered for v${NEW_VERSION}."
-echo "Next steps (after ~2 min for GitHub Actions build):"
-echo "  1. Claude Code에서: /plugin update oh-my-bridge"
-echo "  2. Claude Code 재시작"
+echo "Done. Next steps:"
+echo "  1. git push origin <branch> → PR → main 머지"
+echo "  2. git push origin v${NEW_VERSION}  ← 머지 후 이걸 push하면 GitHub Actions 빌드 시작"
+echo "  3. (2분 대기) Claude Code에서: /plugin update oh-my-bridge"
+echo "  4. Claude Code 재시작"

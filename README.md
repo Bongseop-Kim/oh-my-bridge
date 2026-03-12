@@ -201,9 +201,11 @@ cd mcp-servers/bridge && CGO_ENABLED=0 go build -o oh-my-bridge .
 cp skills/code-routing.md ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/$(cat .claude-plugin/plugin.json | jq -r .version)/skills/code-routing.md
 
 # 재배포 순서
-# 1. ./bump-version.sh <version>   ← commit + tag + push 자동 포함
-# 2. (2분 대기) /plugin update oh-my-bridge
-# 3. Claude Code 재시작
+# 1. ./bump-version.sh <version>   ← commit + local tag 자동 포함
+# 2. git push origin <branch> → PR → main 머지
+# 3. git push origin v<version>    ← GitHub Actions 트리거
+# 4. (2분 대기) /plugin update oh-my-bridge
+# 5. Claude Code 재시작
 ```
 
 ---

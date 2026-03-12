@@ -35,9 +35,11 @@ gemini --version
 /oh-my-bridge:uninstall
 
 # 재배포 순서
-# 1. ./bump-version.sh <new-version>  # 버전 업데이트 + commit + tag + push (GitHub Actions 자동 트리거)
-# 2. (2분 대기) Claude Code에서: /plugin update oh-my-bridge
-# 3. Claude Code 재시작
+# 1. ./bump-version.sh <new-version>  # 버전 업데이트 + commit + local tag
+# 2. git push origin <branch> → PR → main 머지
+# 3. git push origin v<new-version>   # GitHub Actions 트리거
+# 4. (2분 대기) Claude Code에서: /plugin update oh-my-bridge
+# 5. Claude Code 재시작
 
 # 캐시 직접 동기화 (버전 업 전 급할 때, 현재 버전: 2.2.0)
 cp skills/code-routing.md ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/2.2.0/skills/code-routing.md
