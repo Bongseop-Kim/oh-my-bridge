@@ -453,23 +453,29 @@ func writeLog(entry logEntry) {
 	go func() {
 		home, err := os.UserHomeDir()
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "writeLog: UserHomeDir: %v\n", err)
 			return
 		}
 		logDir := filepath.Join(home, ".claude", "logs")
 		if err := os.MkdirAll(logDir, 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "writeLog: MkdirAll: %v\n", err)
 			return
 		}
 		logPath := filepath.Join(logDir, "oh-my-bridge.log")
 		f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "writeLog: OpenFile: %v\n", err)
 			return
 		}
 		defer f.Close()
 		data, err := json.Marshal(entry)
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "writeLog: json.Marshal: %v\n", err)
 			return
 		}
-		f.Write(append(data, '\n'))
+		if _, err := f.Write(append(data, '\n')); err != nil {
+			fmt.Fprintf(os.Stderr, "writeLog: Write: %v\n", err)
+		}
 	}()
 }
 
