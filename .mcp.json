@@ -1,9 +1,9 @@
 {
   "mcpServers": {
-    "codex": {
+    "bridge": {
       "type": "stdio",
-      "command": "codex",
-      "args": ["-m", "gpt-5.4", "mcp-server"]
+      "command": "./mcp-servers/bridge/oh-my-bridge",
+      "args": []
     }
   }
 }

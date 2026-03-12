@@ -1,1 +1,7 @@
 .claude/settings.local.json
+
+# mcp-servers build artifacts
+mcp-servers/**/node_modules/
+mcp-servers/**/dist/
+mcp-servers/**/*.js.map
+mcp-servers/bridge/oh-my-bridge

@@ -1,168 +1,218 @@
+<div align="center">
+
 # oh-my-bridge
 
-Claude Code + Codex CLI 외부 모델 통합 브리지 플러그인.
+**Claude가 판단하고, 최적의 모델이 생성한다.**
 
-**핵심 원칙: Claude가 판단하고, GPT가 생성한다.**
+Claude Code에서 작업 유형에 따라 외부 모델을 자동 선택하고 위임하는 브리지 플러그인.
 
-Skill → SubAgent → MCP 레이어를 통해 외부 모델(GPT-5.3-codex)을 Claude Code 워크플로우에 통합한다.
+[![GitHub Release](https://img.shields.io/github/v/release/Bongseop-Kim/oh-my-bridge?color=369eff&labelColor=black&logo=github&style=flat-square)](https://github.com/Bongseop-Kim/oh-my-bridge/releases)
+[![License](https://img.shields.io/badge/license-MIT-white?labelColor=black&style=flat-square)](./LICENSE)
+
+</div>
 
 ---
 
-## 아키텍처
+Claude Code는 훌륭한 오케스트레이터다. 하지만 코드 생성만큼은 GPT-5 Codex가 낫다. UI는 Gemini Pro가 앞선다. 빠른 보일러플레이트는 Claude가 직접 처리하는 게 빠르다.
 
-```
-┌─────────────────────────────────────────┐
-│  Skill (라우팅 판단)                       │  "언제" 외부 모델을 쓸지 결정
-├─────────────────────────────────────────┤
-│  SubAgent (실행 오케스트레이션)              │  "어떻게" 호출하고 결과를 검증할지 제어
-├─────────────────────────────────────────┤
-│  MCP Server (도구 등록)                    │  Codex CLI를 네이티브 도구로 등록
-├─────────────────────────────────────────┤
-│  Hook (모니터링)                           │  MCP 호출 비용 로깅
-├─────────────────────────────────────────┤
-│  Plugin (패키징)                           │  위 전체를 설치 가능한 단위로 번들링
-└─────────────────────────────────────────┘
-```
+oh-my-bridge는 그 판단을 자동화한다. 작업 유형을 분류하고, 가장 적합한 모델에 위임하고, 실패하면 다음 모델로 자동 전환한다. Claude는 생각하고, 외부 모델이 만든다.
 
-**실행 흐름 — Skill 기반 자율 라우팅**
+---
 
-```
+## 어떻게 동작하는가
+
+```text
 사용자 요청
-  → Claude가 oh-my-bridge:code-routing 스킬 판단 기준 적용
-  → 코드 생성 작업: mcp__plugin_oh-my-bridge_codex__codex 호출
-      → Codex CLI (GPT-5.3-codex) 코드 생성
-      → Claude가 Read로 결과 검증 → 사용자에게 보고
-  → 단순 편집: Claude 네이티브 Edit/Write 직접 사용
+  → [code-routing] 코드 작업인가?
+      → YES: [model-routing] 카테고리 분류 → 모델 선택
+          → MCP 호출 성공 → 결과 검증 → 사용자 보고
+          → MCP 호출 실패 → 다음 모델로 Fallback
+      → NO: Claude 네이티브 Edit/Write 직접 사용
 ```
 
----
+두 개의 Skill이 이 흐름을 제어한다.
 
-## 전제 조건
+| Skill | 역할 | 결정 |
+|-------|------|------|
+| `code-routing` | 위임 여부 판단 | "결과가 실행 가능한 코드인가?" → delegate / direct |
+| `model-routing` | 모델 선택 | 카테고리 분류 → Fallback Chain 실행 |
 
-| 도구 | 설치 확인 |
-|------|----------|
-| Claude Code | `claude --version` |
-| Codex CLI (`@openai/codex` ≥ v0.106.0) | `codex --version` |
-| jq | `jq --version` |
-
-Codex CLI 설치:
-
-```bash
-npm install -g @openai/codex
-```
+> **code-routing은 WHY/WHEN, model-routing은 HOW/WHICH.**
+> 관심사를 분리해 각각 독립적으로 교체 가능하다.
 
 ---
 
 ## 설치
 
-### Phase 1–2: 플러그인 설치
+### 전제 조건
 
 ```bash
-# 로컬 경로에서 설치
+npm install -g @openai/codex      # Codex CLI
+npm install -g @google/gemini-cli # Gemini CLI
+
+codex --version   # 설치 확인
+gemini --version
+```
+
+### Phase 1 — 플러그인 설치
+
+```bash
 /plugin install /path/to/oh-my-bridge
 ```
 
-설치 후 자동으로:
-- `.mcp.json` — `mcp__plugin_oh-my-bridge_codex__codex` 도구 등록
-- `agents/codex-generator.md` — SubAgent 자동 등록
+자동으로 처리됨:
+- `.mcp.json` — bridge MCP 서버 등록
+- `agents/code-orchestrator.md` — SubAgent 등록
 - `hooks/hooks.json` — PostToolUse 로깅 훅 바인딩
 
-### Phase 3: Skill 설치
+### Phase 2 — Skill 설치
 
-`/plugin install`은 `skills/`를 `~/.claude/skills/`에 복사하지 않는다. 슬래시 커맨드로 배포:
-
-```
+```text
 /oh-my-bridge:setup
 ```
 
-Claude Code를 재시작하면 `oh-my-bridge:code-routing` 스킬이 자동 적용된다.
+Claude Code를 재시작하면 `code-routing`, `model-routing` Skill이 자동 적용된다.
 
 ---
 
-## 디렉토리 구조
+## 모델 라인업
 
-```
-oh-my-bridge/
-├── CLAUDE.md                          프로젝트 컨텍스트 (명령어, gotcha)
-├── LICENSE
-├── .claude-plugin/
-│   ├── marketplace.json               마켓플레이스 메타데이터
-│   └── plugin.json                    플러그인 메타데이터
-├── .mcp.json                          Codex MCP 서버 등록
-├── agents/
-│   └── codex-generator.md             SubAgent 정의 (MCP 호출 오케스트레이션)
-├── commands/
-│   ├── setup.md                       /oh-my-bridge:setup 슬래시 커맨드
-│   └── uninstall.md                   /oh-my-bridge:uninstall 슬래시 커맨드
-├── hooks/
-│   ├── hooks.json                     PostToolUse 로깅 훅
-│   └── log-codex-usage.sh             JSONL 사용량 로깅
-├── skills/
-│   └── code-routing.md                설치용 스킬 (→ ~/.claude/skills/oh-my-bridge/SKILL.md)
-├── bump-version.sh                    버전 업데이트 헬퍼
-└── README.md
-```
+| MCP 서버 | 커버 모델 | 방식 |
+|---------|---------|------|
+| **bridge (Go)** | GPT-5.3 Codex, GPT-5.4, GPT-5-Nano, Gemini Pro/Flash | Go 정적 바이너리 |
+| **Claude (직접)** | — | MCP 없음, Claude 자신이 처리 |
+
+---
+
+## 카테고리별 Fallback Chain
+
+작업을 분류하면 모델이 자동으로 결정된다. 호출 실패 시 다음 모델로 자동 전환.
+
+| 카테고리 | 적용 작업 | 1순위 | 2순위 | 3순위 |
+|---------|---------|------|------|------|
+| `visual-engineering` | UI, CSS, SVG, 레이아웃 | Gemini Pro | Claude | — |
+| `ultrabrain` | 알고리즘, 복잡한 아키텍처 | GPT-5.3 Codex (xhigh) | Gemini Pro | Claude |
+| `deep` | 리팩토링, 복잡한 로직 | GPT-5.3 Codex (medium) | Claude | Gemini Pro |
+| `artistry` | 창의적 패턴, 코드 스타일 | Gemini Pro | Claude | GPT-5.4 |
+| `quick` | 보일러플레이트, 단순 함수 | Claude | Gemini Flash | GPT-5-Nano |
+| `writing` | 문서, 주석, README | Gemini Flash | Claude | — |
+| `unspecified-high` | 판단 어렵고 중요도 높음 | GPT-5.4 | Claude | — |
+| `unspecified-low` | 판단 어렵고 중요도 낮음 | Claude | GPT-5.3 Codex | Gemini Flash |
 
 ---
 
 ## 검증
 
-### Phase 1a — MCP 도구 인식 확인
+### MCP 연결
 
-```
+```text
 /mcp
 ```
 
-`plugin:oh-my-bridge:codex · ✔ connected` 표시 확인.
+아래 항목 `✔ connected` 확인:
+- `bridge`
 
-### Phase 1b — SubAgent 등록 확인
-
-```
-/agents
-```
-
-`oh-my-bridge:codex-generator · haiku` 표시 확인.
-
-### Phase 3 — Skill 설치 확인
+### Skill 설치
 
 ```bash
-head -3 ~/.claude/skills/oh-my-bridge/SKILL.md
-# name: oh-my-bridge:code-routing
+ls ~/.claude/skills/oh-my-bridge/
+# code-routing.md  model-routing.md
 ```
 
 ### E2E 테스트
 
-**코드 생성 (MCP 위임 확인)**:
+**코드 생성 — MCP 위임 확인:**
 
-```
+```text
 Express.js REST API 엔드포인트 구현해줘
 ```
 
-확인 항목:
-1. Claude가 `mcp__plugin_oh-my-bridge_codex__codex` 호출 (Edit 아닌)
-2. 로그에 항목 추가됨: `tail -1 ~/.claude/logs/codex-usage.log | jq .`
-3. UI에 "Error" 문구 없음
+1. Claude가 카테고리를 `deep` 또는 `unspecified-high`로 분류
+2. `mcp__bridge__delegate` 호출 (model은 model-routing skill이 결정)
+3. 응답에 `category`, `model used` 포함
 
-**단순 편집 (직접 처리 확인)**:
+**단순 편집 — 직접 처리 확인:**
 
-```
+```text
 README.md 오타 수정해줘
 ```
 
-확인 항목:
-1. Claude가 Edit 직접 사용 (MCP 미호출)
+Claude가 Edit 직접 사용. MCP 미호출.
 
 ---
 
-## 로그 조회
+## 로그
 
 ```bash
-# 전체 로그
-cat ~/.claude/logs/codex-usage.log
+# 최근 5건
+tail -5 ~/.claude/logs/codex-usage.log | jq .
 
-# 에러만 필터
+# 에러만
 jq 'select(.status == "error")' ~/.claude/logs/codex-usage.log
 
 # 오늘 사용량
 jq 'select(.timestamp | startswith("'"$(date -u +%Y-%m-%d)"'"))' ~/.claude/logs/codex-usage.log
 ```
+
+---
+
+## 디렉토리 구조
+
+```text
+oh-my-bridge/
+├── .claude-plugin/
+│   ├── marketplace.json
+│   └── plugin.json
+├── .mcp.json                 bridge MCP 등록
+├── .goreleaser.yml           GoReleaser 릴리즈 자동화
+├── .github/workflows/
+│   └── release.yml          태그 push 시 바이너리 빌드 + 배포
+├── mcp-servers/
+│   └── bridge/              Go MCP 서버 (정적 바이너리)
+│       ├── main.go
+│       ├── go.mod
+│       └── go.sum
+├── agents/
+│   └── code-orchestrator.md   SubAgent (카테고리 분류 + MCP 호출)
+├── commands/
+│   ├── setup.md             /oh-my-bridge:setup
+│   └── uninstall.md         /oh-my-bridge:uninstall
+├── hooks/
+│   ├── hooks.json
+│   └── log-codex-usage.sh
+├── skills/
+│   ├── code-routing.md      위임 여부 판단
+│   └── model-routing.md     카테고리 분류 + Fallback Chain
+└── bump-version.sh
+```
+
+---
+
+## 개발
+
+```bash
+# 로컬 바이너리 빌드
+cd mcp-servers/bridge && CGO_ENABLED=0 go build -o oh-my-bridge .
+
+# 버전 업데이트 (3개 파일 한 번에)
+./bump-version.sh <new-version>
+
+# 캐시 직접 동기화
+cp skills/code-routing.md ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/$(cat .claude-plugin/plugin.json | jq -r .version)/skills/code-routing.md
+
+# 재배포 순서
+# 1. ./bump-version.sh <version>
+# 2. git commit
+# 3. /plugin update oh-my-bridge
+# 4. Claude Code 재시작
+```
+
+---
+
+## 제거
+
+```
+/oh-my-bridge:uninstall
+```
+
+Skill 파일 제거 후 Claude Code를 재시작하면 플러그인이 비활성화된다.
