@@ -136,17 +136,15 @@ mcp__bridge__delegate({
 
 3. If response `action` is `"claude"`: handle the task directly with Claude native Edit/Write.
 
-4. If MCP call fails (runtime error): handle the task directly with Claude native Edit/Write. Do not retry.
-
-5. If error contains `category %q not found in config routes`:
-   - Config error — do NOT fall back to direct handling
-   - Verify category spelling in `~/.config/oh-my-bridge/config.json` and retry
-
-### Known error cases
-
-If error contains `"outside workspace root"`:
-- `OH_MY_BRIDGE_WORKSPACE_ROOT` is not set or points to the wrong directory
-- Verify the env var is set to the project root, or relaunch MCP server from the correct directory
+4. If MCP call fails, check the error before falling back:
+   - If error contains `"cwd must stay within workspace root"`:
+     - `OH_MY_BRIDGE_WORKSPACE_ROOT` is not set or points to the wrong directory
+     - Verify the env var is set to the project root, or relaunch MCP server from the correct directory
+     - Do NOT fall back to direct handling
+   - If error contains `category %q not found in config routes`:
+     - Config error — do NOT fall back to direct handling
+     - Verify category spelling in `~/.config/oh-my-bridge/config.json` and retry
+   - Otherwise (generic runtime error): handle the task directly with Claude native Edit/Write. Do not retry.
 
 ## Security
 
