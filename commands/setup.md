@@ -61,7 +61,42 @@ mkdir -p ~/.claude/skills/oh-my-bridge
 cp "${CLAUDE_PLUGIN_ROOT}/skills/code-routing.md" ~/.claude/skills/oh-my-bridge/SKILL.md
 ```
 
-4. **Generate config**
+4. **Install shell alias**
+
+```bash
+SHELL_RC=""
+if [ -f "$HOME/.zshrc" ]; then
+  SHELL_RC="$HOME/.zshrc"
+elif [ -f "$HOME/.bashrc" ]; then
+  SHELL_RC="$HOME/.bashrc"
+fi
+
+if [ -n "$SHELL_RC" ]; then
+  if grep -q "oh-my-bridge()" "$SHELL_RC" 2>/dev/null; then
+    echo "OK: shell function already exists in $SHELL_RC"
+  else
+    cat >> "$SHELL_RC" << 'SHELLRC'
+
+# oh-my-bridge config CLI
+oh-my-bridge() {
+  local bin
+  bin=$(ls ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/*/mcp-servers/bridge/oh-my-bridge 2>/dev/null | sort -V | tail -1)
+  if [ -z "$bin" ]; then
+    echo "oh-my-bridge: binary not found — run /oh-my-bridge:setup" >&2
+    return 1
+  fi
+  "$bin" "$@"
+}
+SHELLRC
+    echo "OK: shell function added to $SHELL_RC"
+    echo "  Run: source $SHELL_RC  (or open a new terminal)"
+  fi
+else
+  echo "SKIP: could not find .zshrc or .bashrc — add the alias manually"
+fi
+```
+
+5. **Generate config**
 
 ```bash
 CONFIG_DIR="$HOME/.config/oh-my-bridge"
@@ -102,7 +137,7 @@ CONF
 echo "OK: config written to $CONFIG_FILE"
 ```
 
-5. **Verify installation**
+6. **Verify installation**
 
 ```bash
 # Verify Go binary
@@ -134,13 +169,17 @@ description: ...
 }
 ```
 
-6. **Report to user**
+7. **Report to user**
 
 Tell the user:
 - Skill installed to `~/.claude/skills/oh-my-bridge/SKILL.md`
 - Config written to `~/.config/oh-my-bridge/config.json`
   - Routes (category → model) and model definitions are in the config
   - Edit the config to customize routing — `/oh-my-bridge:setup` resets it to defaults, so back up custom settings first
+- `oh-my-bridge config` — 쉘 함수로 등록됨 (새 터미널 또는 `source ~/.zshrc` 후 사용 가능)
+  - `oh-my-bridge config` — 카테고리별 모델 할당 TUI
+  - `oh-my-bridge config list` — 현재 라우트 테이블 출력
+  - `oh-my-bridge config validate` — config 검증
 - **Restart Claude Code** for the skill to take effect
 - After restart, Claude will automatically decide when to delegate and route to the best available model (Codex or Gemini) via the unified bridge MCP tool
 
