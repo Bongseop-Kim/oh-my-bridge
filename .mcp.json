@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "bridge": {
-      "type": "stdio",
-      "command": "./mcp-servers/bridge/oh-my-bridge",
-      "args": []
-    }
-  }
-}

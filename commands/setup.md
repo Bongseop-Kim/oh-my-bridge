@@ -9,26 +9,34 @@ Install the code-routing skill so Claude automatically decides when and to which
 
 ## Steps
 
-1. **Check & build oh-my-bridge binary**
-
-The binary is built from source in this repository — it is not distributed via Homebrew or package managers.
+1. **Download oh-my-bridge binary**
 
 ```bash
+VERSION=$(jq -r '.version' "${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json")
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
 BINARY="${CLAUDE_PLUGIN_ROOT}/mcp-servers/bridge/oh-my-bridge"
+URL="https://github.com/Bongseop-Kim/oh-my-bridge/releases/download/v${VERSION}/oh-my-bridge_${VERSION}_${OS}_${ARCH}.tar.gz"
+
 if [ -x "$BINARY" ]; then
-  echo "OK: binary exists at $BINARY"
-elif command -v go &>/dev/null; then
-  echo "Building oh-my-bridge from source..."
-  (cd "${CLAUDE_PLUGIN_ROOT}/mcp-servers/bridge" && go build -o oh-my-bridge .) && echo "OK: build succeeded"
+  echo "OK: binary already exists at $BINARY"
 else
-  echo "ERROR: binary not found and Go is not installed."
-  echo "Install Go from https://go.dev/dl/ then re-run setup, or pre-build manually:"
-  echo "  cd ${CLAUDE_PLUGIN_ROOT}/mcp-servers/bridge && go build -o oh-my-bridge ."
-  exit 1
+  echo "Downloading oh-my-bridge v${VERSION} for ${OS}/${ARCH}..."
+  TMPDIR=$(mktemp -d)
+  if curl -fsSL "$URL" | tar -xz -C "$TMPDIR"; then
+    mv "$TMPDIR"/oh-my-bridge*/oh-my-bridge "$BINARY"
+    chmod +x "$BINARY"
+    rm -rf "$TMPDIR"
+    echo "OK: downloaded successfully"
+  else
+    rm -rf "$TMPDIR"
+    echo "ERROR: Download failed. Release v${VERSION} may not exist yet."
+    echo "  URL: $URL"
+    echo "  Check: https://github.com/Bongseop-Kim/oh-my-bridge/releases"
+    exit 1
+  fi
 fi
 ```
-
-If the binary is missing and Go is unavailable, stop and show the install instructions.
 
 2. **Register MCP server with absolute path in global config**
 
@@ -39,7 +47,7 @@ BINARY="${CLAUDE_PLUGIN_ROOT}/mcp-servers/bridge/oh-my-bridge"
 MCP_JSON="$HOME/.claude/mcp.json"
 
 if [ -f "$MCP_JSON" ]; then
-  jq --arg bin "$BINARY" '.mcpServers.bridge.command = $bin' "$MCP_JSON" > /tmp/mcp.json && mv /tmp/mcp.json "$MCP_JSON"
+  jq --arg bin "$BINARY" '.mcpServers.bridge = {"type":"stdio","command":$bin,"args":[]}' "$MCP_JSON" > /tmp/mcp.json && mv /tmp/mcp.json "$MCP_JSON"
 else
   echo "{\"mcpServers\":{\"bridge\":{\"type\":\"stdio\",\"command\":\"$BINARY\",\"args\":[]}}}" > "$MCP_JSON"
 fi

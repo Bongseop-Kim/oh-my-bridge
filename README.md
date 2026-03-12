@@ -191,20 +191,21 @@ oh-my-bridge/
 ## 개발
 
 ```bash
-# 로컬 바이너리 빌드
+# 로컬 바이너리 빌드 (개발자용, Go 필요)
 cd mcp-servers/bridge && CGO_ENABLED=0 go build -o oh-my-bridge .
 
-# 버전 업데이트 (3개 파일 한 번에)
+# 버전 업데이트 + 릴리즈 (commit + tag + push → GitHub Actions 자동 빌드)
 ./bump-version.sh <new-version>
 
-# 캐시 직접 동기화
+# 캐시 직접 동기화 (skill 파일만, 급할 때)
 cp skills/code-routing.md ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/$(cat .claude-plugin/plugin.json | jq -r .version)/skills/code-routing.md
 
 # 재배포 순서
-# 1. ./bump-version.sh <version>
-# 2. git commit
-# 3. /plugin update oh-my-bridge
-# 4. Claude Code 재시작
+# 1. ./bump-version.sh <version>   ← commit + local tag 자동 포함
+# 2. git push origin <branch> → PR → main 머지
+# 3. git push origin v<version>    ← GitHub Actions 트리거
+# 4. (2분 대기) /plugin update oh-my-bridge
+# 5. Claude Code 재시작
 ```
 
 ---
