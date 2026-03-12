@@ -63,7 +63,7 @@ gemini --version
 
 자동으로 처리됨:
 - `.mcp.json` — Codex / Gemini MCP 서버 등록
-- `agents/codex-generator.md` — SubAgent 등록
+- `agents/code-orchestrator.md` — SubAgent 등록
 - `hooks/hooks.json` — PostToolUse 로깅 훅 바인딩
 
 ### Phase 2 — Skill 설치
@@ -170,7 +170,7 @@ oh-my-bridge/
 ├── mcp-servers/
 │   └── gemini/              Gemini CLI subprocess MCP 서버
 ├── agents/
-│   └── codex-generator.md   SubAgent (카테고리 분류 + MCP 호출)
+│   └── code-orchestrator.md   SubAgent (카테고리 분류 + MCP 호출)
 ├── commands/
 │   ├── setup.md             /oh-my-bridge:setup
 │   └── uninstall.md         /oh-my-bridge:uninstall

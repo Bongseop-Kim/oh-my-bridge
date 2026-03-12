@@ -126,12 +126,12 @@ server.tool(
   {
     prompt: z.string().min(1),
     cwd: z.string().optional(),
-    model: z.string().optional(),
+    model: z.string(),
     sandbox: z.string().optional(),
     "approval-policy": z.string().optional(),
     timeoutMs: z.number().int().positive().max(300000).optional(),
   },
-  async ({ prompt, cwd, model, sandbox, "approval-policy": approvalPolicy, timeoutMs }) => {
+  async ({ prompt, cwd, model, sandbox, "approval-policy": approvalPolicy, timeoutMs  }) => {
     void sandbox; // accepted by MCP schema for API compatibility but not used by Gemini CLI
     void approvalPolicy; // accepted by MCP schema for API compatibility but not used by Gemini CLI
 

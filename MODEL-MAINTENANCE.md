@@ -1,4 +1,4 @@
-# 모델 유지보수 가이드
+# 모델 유지보수 가이드 (한글)
 
 ## 트리거
 
@@ -14,7 +14,7 @@
 | 파일 | 섹션 |
 |------|------|
 | `skills/model-routing.md` | `## Fallback Chain` |
-| `agents/codex-generator.md` | `### Step 2` |
+| `agents/code-orchestrator.md` | `### Step 2` |
 | `README.md` | `## 카테고리별 Fallback Chain` |
 
 ## 현재 Fallback Chain (2026-03-11)
