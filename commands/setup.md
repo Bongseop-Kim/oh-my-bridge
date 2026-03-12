@@ -40,18 +40,18 @@ fi
 
 2. **Register MCP server with absolute path in global config**
 
-Write the bridge MCP server entry to `~/.claude/mcp.json` using the absolute cache path, so the binary is found regardless of which project directory Claude Code is opened in.
+Write the bridge MCP server entry to `~/.claude.json` using the absolute cache path, so the binary is found regardless of which project directory Claude Code is opened in.
 
 ```bash
 BINARY="${CLAUDE_PLUGIN_ROOT}/mcp-servers/bridge/oh-my-bridge"
-MCP_JSON="$HOME/.claude/mcp.json"
+CLAUDE_JSON="$HOME/.claude.json"
 
-if [ -f "$MCP_JSON" ]; then
-  jq --arg bin "$BINARY" '.mcpServers.bridge = {"type":"stdio","command":$bin,"args":[]}' "$MCP_JSON" > /tmp/mcp.json && mv /tmp/mcp.json "$MCP_JSON"
+if [ -f "$CLAUDE_JSON" ]; then
+  jq --arg bin "$BINARY" '.mcpServers.bridge = {"type":"stdio","command":$bin,"args":[]}' "$CLAUDE_JSON" > /tmp/claude.json && mv /tmp/claude.json "$CLAUDE_JSON"
 else
-  echo "{\"mcpServers\":{\"bridge\":{\"type\":\"stdio\",\"command\":\"$BINARY\",\"args\":[]}}}" > "$MCP_JSON"
+  echo "{\"mcpServers\":{\"bridge\":{\"type\":\"stdio\",\"command\":\"$BINARY\",\"args\":[]}}}" > "$CLAUDE_JSON"
 fi
-echo "OK: ~/.claude/mcp.json updated with absolute path"
+echo "OK: ~/.claude.json updated with absolute path"
 ```
 
 3. **Install skills**
