@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -40,6 +41,7 @@ type ModelDef struct {
 var (
 	cfg           Config
 	availableCLIs map[string]bool
+	mu            sync.Mutex
 
 	// ErrTimeout is returned by runCli when the context deadline is exceeded.
 	ErrTimeout = errors.New("cli timeout")
@@ -118,6 +120,18 @@ func detectCLIs() {
 	}
 }
 
+// reloadState reloads config and detects CLI availability under a mutex lock.
+// Called on each delegate/status invocation to pick up runtime config changes.
+func reloadState() error {
+	mu.Lock()
+	defer mu.Unlock()
+	if err := loadConfig(); err != nil {
+		return err
+	}
+	detectCLIs()
+	return nil
+}
+
 func main() {
 	// config 서브커맨드 분기 — MCP 서버 기동 전에 처리
 	if len(os.Args) > 1 && os.Args[1] == "config" {
@@ -157,6 +171,10 @@ func main() {
 }
 
 func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInput) (*mcp.CallToolResult, delegateOutput, error) {
+	// Reload config and CLI availability on each invocation to pick up runtime changes.
+	if err := reloadState(); err != nil {
+		return nil, delegateOutput{}, fmt.Errorf("config reload failed: %w", err)
+	}
 	if strings.TrimSpace(input.Prompt) == "" {
 		return nil, delegateOutput{}, errors.New("prompt is required")
 	}
@@ -285,6 +303,10 @@ type statusOutput struct {
 }
 
 func statusTool(ctx context.Context, _ *mcp.CallToolRequest, _ statusInput) (*mcp.CallToolResult, statusOutput, error) {
+	// Reload config and CLI availability on each invocation to pick up runtime changes.
+	if err := reloadState(); err != nil {
+		return nil, statusOutput{}, fmt.Errorf("config reload failed: %w", err)
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, statusOutput{}, fmt.Errorf("cannot determine home directory: %w", err)
