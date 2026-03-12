@@ -13,7 +13,7 @@
 
 | 파일 | 섹션 |
 |------|------|
-| `skills/model-routing.md` | `## Fallback Chain` |
+| `skills/code-routing.md` | `### Fallback Chain` |
 | `agents/code-orchestrator.md` | `### Step 2` |
 | `README.md` | `## 카테고리별 Fallback Chain` |
 

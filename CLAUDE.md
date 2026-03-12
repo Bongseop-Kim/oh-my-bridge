@@ -52,7 +52,7 @@ tail -5 ~/.claude/logs/codex-usage.log | jq .
 
 `/oh-my-bridge:setup` 실행 후 Claude는 `~/.claude/skills/oh-my-bridge/SKILL.md`를 세션마다 자동으로 읽는다.
 
-- **코드 생성 작업** (새 파일, 함수/클래스 구현, 리팩토링) → `mcp__bridge__delegate` 호출 (model은 model-routing skill이 결정)
+- **코드 생성 작업** (새 파일, 함수/클래스 구현, 리팩토링) → `mcp__bridge__delegate` 호출 (model은 code-routing skill의 Fallback Chain이 결정)
 - **단순 편집** (오타, 한 줄 변경, config, 문서) → Claude 네이티브 Edit/Write 직접 사용
 
 MCP 호출 후에는 `Read` 도구로 생성 파일을 확인하고 결과를 보고한다.
