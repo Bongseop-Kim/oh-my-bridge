@@ -84,11 +84,11 @@ import { useLogin } from "@refinedev/core";
 Exception: paste short type definitions inline when field-level accuracy is critical (e.g., strict TypeScript contracts).
 
 ```
-mcp__plugin_oh-my-bridge_codex__codex({
+mcp__bridge__delegate({
   prompt: "<7-Section delegation prompt>",
+  model: "<model from oh-my-bridge:model-routing>",
   cwd: "<absolute project path>",
-  sandbox: "workspace-write",
-  approval-policy: "never"
+  reasoning_effort: "<effort if applicable, omit otherwise>"
 })
 ```
 

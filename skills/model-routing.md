@@ -54,11 +54,16 @@ Work through the chain top to bottom. Stop at the first success.
 
 ## MCP Tool Mapping
 
-| Model | MCP | Notes |
-|-------|-----|-------|
-| GPT-5.3 Codex (xhigh/medium) | `mcp__plugin_oh-my-bridge_codex__codex` | OpenAI official MCP |
-| GPT-5.4 (high) / GPT-5-Nano | `mcp__plugin_oh-my-bridge_codex__codex` | OpenAI official MCP |
-| Gemini Pro (high) / Gemini Flash | `mcp__plugin_oh-my-bridge_gemini__gemini` | Local Gemini CLI MCP bridge |
+All external models are called via a single unified MCP: `mcp__bridge__delegate`.
+
+| Model | `model` param | `reasoning_effort` |
+|-------|---------------|--------------------|
+| GPT-5.3 Codex (xhigh) | `gpt-5.3-codex` | `high` |
+| GPT-5.3 Codex (medium) | `gpt-5.3-codex` | `medium` |
+| GPT-5.4 (high) | `gpt-5.4` | `high` |
+| GPT-5-Nano | `gpt-5-nano` | — |
+| Gemini Pro (high) | `gemini-2.5-pro` | — |
+| Gemini Flash | `gemini-2.5-flash` | — |
 | **Claude (native)** | — | Edit/Write directly (no MCP) |
 
 ---

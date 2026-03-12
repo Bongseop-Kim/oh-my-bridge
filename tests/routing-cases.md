@@ -80,7 +80,7 @@ bash tests/setup-test-project.sh
 1. `claude` 명령으로 새 세션 시작
 2. 해당 케이스의 프롬프트를 그대로 입력
 3. Claude가 호출한 도구 관찰:
-   - `mcp__plugin_oh-my-bridge_codex__codex` 호출 → **Codex 위임**
+   - `mcp__bridge__delegate` 호출 → **외부 모델 위임**
    - `Edit` / `Write` / `Bash` 직접 호출 → **Claude 직접 처리**
 4. 로그 확인 (선택):
    ```bash

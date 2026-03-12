@@ -57,18 +57,22 @@ Build a 7-Section delegation prompt:
 
 ### Step 4 — Call MCP tool
 
-| Model | MCP Tool | Notes |
-|-------|----------|-------|
-| GPT-5.3 Codex (xhigh/medium) | `mcp__plugin_oh-my-bridge_codex__codex` | OpenAI official MCP |
-| GPT-5.4 (high) / GPT-5-Nano | `mcp__plugin_oh-my-bridge_codex__codex` | OpenAI official MCP |
-| Gemini Pro / Gemini Flash | `mcp__plugin_oh-my-bridge_gemini__gemini` | Gemini CLI local MCP bridge |
+All models use a single unified MCP: `mcp__bridge__delegate`.
+
+| Model | `model` param | `reasoning_effort` |
+|-------|---------------|--------------------|
+| GPT-5.3 Codex (xhigh/medium) | `gpt-5.3-codex` | `high` / `medium` |
+| GPT-5.4 (high) | `gpt-5.4` | `high` |
+| GPT-5-Nano | `gpt-5-nano` | — |
+| Gemini Pro | `gemini-2.5-pro` | — |
+| Gemini Flash | `gemini-2.5-flash` | — |
 
 ```text
-<mcp-tool>({
+mcp__bridge__delegate({
   prompt: "<7-Section delegation prompt>",
+  model: "<model param from table above>",
   cwd: "<absolute project path>",
-  sandbox: "workspace-write",
-  approval-policy: "never"
+  reasoning_effort: "<effort if applicable, omit otherwise>"
 })
 ```
 

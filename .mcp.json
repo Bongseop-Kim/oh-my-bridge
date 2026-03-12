@@ -1,15 +1,5 @@
 {
   "mcpServers": {
-    "codex": {
-      "type": "stdio",
-      "command": "codex",
-      "args": ["mcp-server"]
-    },
-    "gemini": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["./mcp-servers/gemini/index.js"]
-    },
     "bridge": {
       "type": "stdio",
       "command": "node",

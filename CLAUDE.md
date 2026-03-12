@@ -1,6 +1,6 @@
 # oh-my-bridge — CLAUDE.md
 
-Claude가 코드 생성 작업을 자율 판단하여 Codex CLI(MCP)에 위임하는 skill 기반 브리지 플러그인 (v2.0.4).
+Claude가 코드 생성 작업을 자율 판단하여 적합한 AI 모델(Codex/Gemini)에 위임하는 skill 기반 브리지 플러그인 (v2.0.4).
 
 ## 전제조건
 
@@ -36,7 +36,7 @@ tail -5 ~/.claude/logs/codex-usage.log | jq .
 
 `/oh-my-bridge:setup` 실행 후 Claude는 `~/.claude/skills/oh-my-bridge/SKILL.md`를 세션마다 자동으로 읽는다.
 
-- **코드 생성 작업** (새 파일, 함수/클래스 구현, 리팩토링) → `mcp__plugin_oh-my-bridge_codex__codex` 호출
+- **코드 생성 작업** (새 파일, 함수/클래스 구현, 리팩토링) → `mcp__bridge__delegate` 호출 (model은 model-routing skill이 결정)
 - **단순 편집** (오타, 한 줄 변경, config, 문서) → Claude 네이티브 Edit/Write 직접 사용
 
 MCP 호출 후에는 `Read` 도구로 생성 파일을 확인하고 결과를 보고한다.
@@ -59,7 +59,7 @@ Claude 네이티브 Write/Edit은 ~7s로 3–4배 빠르다. 단순 편집은 MC
 ## 동작 확인
 
 ```bash
-/mcp     # plugin:oh-my-bridge:codex · ✔ connected
+/mcp     # bridge · ✔ connected
 /agents  # oh-my-bridge:code-orchestrator · haiku
 head -3 ~/.claude/skills/oh-my-bridge/SKILL.md  # name: oh-my-bridge:code-routing
 ```
