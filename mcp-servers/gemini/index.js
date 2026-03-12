@@ -46,7 +46,7 @@ function extractText(payload) {
 }
 
 async function runGemini({ prompt, cwd, model, timeoutMs }) {
-  const args = ["-p", prompt, "--output-format", "json"];
+  const args = ["-p", prompt, "--yolo", "--output-format", "json"];
   if (model) {
     args.push("-m", model);
   }
@@ -126,7 +126,10 @@ server.tool(
   {
     prompt: z.string().min(1),
     cwd: z.string().optional(),
-    model: z.string(),
+    model: z.string().refine(
+      (m) => !m || /gemini-2\.5|gemini-3/.test(m),
+      { message: "gemini-2.0 and older models do not support thinking config required by gemini-cli. Use gemini-2.5-flash or gemini-2.5-pro." }
+    ),
     sandbox: z.string().optional(),
     "approval-policy": z.string().optional(),
     timeoutMs: z.number().int().positive().max(300000).optional(),
