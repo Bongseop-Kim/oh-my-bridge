@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -25,7 +27,7 @@ const (
 
 type delegateInput struct {
 	Prompt          string `json:"prompt" jsonschema:"Task prompt to send to the selected model."`
-	Model           string `json:"model" jsonschema:"Target model. Supported prefixes include gemini-*, gpt-*, codex-*, and o*."`
+	Model           string `json:"model" jsonschema:"Target model identifier. Must be one of the exact model names in the MCP Tool Mapping table (e.g. gpt-5.3-codex, gpt-5.4, gpt-5-nano, gemini-2.5-pro, gemini-2.5-flash)."`
 	CWD             string `json:"cwd,omitempty" jsonschema:"Optional working directory, constrained to the configured workspace root."`
 	TimeoutMs       int    `json:"timeoutMs,omitempty" jsonschema:"Optional timeout in milliseconds. Maximum 300000."`
 	ReasoningEffort string `json:"reasoning_effort,omitempty" jsonschema:"Optional reasoning effort passed through to Codex."`
@@ -39,6 +41,9 @@ type delegateOutput struct {
 	Provider string `json:"provider" jsonschema:"Resolved CLI provider name."`
 }
 
+// cliResult holds the text output from a CLI invocation.
+// Kept as a struct (rather than a plain string) to allow future fields
+// such as exit code or elapsed time without breaking call sites.
 type cliResult struct {
 	Text string
 }
@@ -67,7 +72,7 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 		return nil, delegateOutput{}, errors.New("model is required")
 	}
 	if input.TimeoutMs < 0 || input.TimeoutMs > maxTimeoutMs {
-		return nil, delegateOutput{}, fmt.Errorf("timeoutMs must be 0 or between 1 and %d", maxTimeoutMs)
+		return nil, delegateOutput{}, fmt.Errorf("timeoutMs must be between 0 and %d", maxTimeoutMs)
 	}
 
 	workspaceRoot, err := getWorkspaceRoot()
@@ -87,11 +92,7 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 
 	timeoutMs := input.TimeoutMs
 	if timeoutMs == 0 {
-		if provider == "gemini" {
-			timeoutMs = defaultGeminiTimeout
-		} else {
-			timeoutMs = defaultCodexTimeout
-		}
+		timeoutMs = defaultTimeout(provider)
 	}
 
 	var result cliResult
@@ -142,6 +143,13 @@ type runOptions struct {
 	TimeoutMs       int
 }
 
+func defaultTimeout(provider string) int {
+	if provider == "gemini" {
+		return defaultGeminiTimeout
+	}
+	return defaultCodexTimeout
+}
+
 func getWorkspaceRoot() (string, error) {
 	root := os.Getenv("OH_MY_BRIDGE_WORKSPACE_ROOT")
 	if strings.TrimSpace(root) == "" {
@@ -178,16 +186,23 @@ func resolveCwd(workspaceRoot, cwd string) (string, error) {
 	return target, nil
 }
 
+// allowedModels is the canonical allowlist derived from skills/code-routing.md.
+// Update this list whenever the MCP Tool Mapping table in that file changes.
+var allowedModels = map[string]string{
+	"gpt-5.3-codex":   "codex",
+	"gpt-5.4":         "codex",
+	"gpt-5-nano":      "codex",
+	"gemini-2.5-pro":  "gemini",
+	"gemini-2.5-flash": "gemini",
+}
+
 func getProvider(model string) (string, error) {
-	switch {
-	case strings.HasPrefix(model, "gemini-"):
-		return "gemini", nil
-	case strings.HasPrefix(model, "gpt-"), strings.HasPrefix(model, "codex-"),
-		len(model) >= 2 && model[0] == 'o' && model[1] >= '0' && model[1] <= '9':
-		return "codex", nil
-	default:
-		return "", errors.New("unsupported model prefix. Use gemini-* or gpt-*/codex-*/o1/o3/o4-* models.")
+	provider, ok := allowedModels[model]
+	if !ok {
+		allowed := slices.Sorted(maps.Keys(allowedModels))
+		return "", fmt.Errorf("unsupported model %q. Allowed models: %s", model, strings.Join(allowed, ", "))
 	}
+	return provider, nil
 }
 
 // runGemini invokes the Gemini CLI. The --yolo flag enables YOLO approval mode,
@@ -205,6 +220,8 @@ func runGemini(ctx context.Context, opts runOptions) (cliResult, error) {
 }
 
 func runCodex(ctx context.Context, opts runOptions) (cliResult, error) {
+	// CreateTemp secures a unique path; we close immediately so Codex can write
+	// to it via -o, then defer removal for cleanup.
 	f, err := os.CreateTemp("", "bridge-codex-*.txt")
 	if err != nil {
 		return cliResult{}, err
@@ -253,6 +270,7 @@ func runCodex(ctx context.Context, opts runOptions) (cliResult, error) {
 		}
 	}
 
+	log.Printf("runCodex: no output from stdout or output file %s; returning (done)", outputFile)
 	return cliResult{Text: "(done)"}, nil
 }
 
