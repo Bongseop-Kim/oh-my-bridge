@@ -5,15 +5,15 @@ description: Install oh-my-bridge routing skill to ~/.claude/skills/oh-my-bridge
 
 # oh-my-bridge Setup
 
-Install the code-routing skill so Claude automatically decides when to delegate to Codex.
+Install the code-routing skill so Claude automatically decides when to delegate to Codex or Gemini.
 
 ## Steps
 
 1. **Check prerequisites**
 
 ```bash
-codex --version || echo "ERROR: Codex CLI not installed. Run: npm install -g @openai/codex"
-jq --version    || echo "ERROR: jq not installed. Run: brew install jq"
+codex --version  || echo "ERROR: Codex CLI not installed. Run: npm install -g @openai/codex"
+gemini --version || echo "ERROR: Gemini CLI not installed. Run: npm install -g @google/gemini-cli"
 ```
 
 If either check fails, stop and ask the user to install the missing tool.
@@ -43,7 +43,7 @@ description: Use when you are about to write code...
 Tell the user:
 - Skill installed to `~/.claude/skills/oh-my-bridge/SKILL.md`
 - **Restart Claude Code** for the skill to take effect
-- After restart, Claude will automatically decide when to delegate code generation to Codex
+- After restart, Claude will automatically decide when to delegate code generation to Codex or Gemini
 
 ## Undo
 

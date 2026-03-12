@@ -11,7 +11,7 @@ Remove the code-routing skill from Claude's skills directory.
 
 1. **Confirm with user**
 
-Ask the user: "This will remove oh-my-bridge routing skill from `~/.claude/skills/oh-my-bridge/`. Claude will no longer automatically delegate code generation to Codex. Proceed?"
+Ask the user: "This will remove oh-my-bridge routing skill from `~/.claude/skills/oh-my-bridge/`. Claude will no longer automatically delegate code generation to Codex or Gemini. Proceed?"
 
 If the user says no, stop.
 
