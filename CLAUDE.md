@@ -28,6 +28,7 @@ gemini --version
 
 # 캐시 직접 동기화 (버전 업 전 급할 때, 현재 버전: 2.1.0)
 cp skills/code-routing.md ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/2.1.0/skills/code-routing.md
+cp skills/model-routing.md ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/2.1.0/skills/model-routing.md
 
 # 사용 로그
 tail -5 ~/.claude/logs/codex-usage.log | jq .
