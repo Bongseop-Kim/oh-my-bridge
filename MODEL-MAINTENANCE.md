@@ -2,7 +2,7 @@
 
 ## 트리거
 
-oh-my-opencode `src/shared/model-requirements.ts` 업데이트 시 → `CATEGORY_MODEL_REQUIREMENTS` 확인
+**외부 레포 참조:** `src/shared/model-requirements.ts`와 `CATEGORY_MODEL_REQUIREMENTS`는 이 레포에 없고 [oh-my-opencode -> oh-my-openagent](https://github.com/code-yeongyu/oh-my-openagent) 레포에 위치한다. oh-my-openagent의 해당 파일이 업데이트될 때 아래 파일들을 함께 수정한다.
 
 ## 변환 규칙
 

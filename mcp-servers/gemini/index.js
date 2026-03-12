@@ -132,8 +132,8 @@ server.tool(
     timeoutMs: z.number().int().positive().max(300000).optional(),
   },
   async ({ prompt, cwd, model, sandbox, "approval-policy": approvalPolicy, timeoutMs }) => {
-    void sandbox;
-    void approvalPolicy;
+    void sandbox; // accepted by MCP schema for API compatibility but not used by Gemini CLI
+    void approvalPolicy; // accepted by MCP schema for API compatibility but not used by Gemini CLI
 
     const resolvedCwd = resolveCwd(cwd);
     const result = await runGemini({

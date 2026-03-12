@@ -65,7 +65,7 @@ Work through the chain top to bottom. Stop at the first success.
 
 ## Execution Flow
 
-```
+```text
 1. Classify category from task description
 2. Pick 1st model in chain
 3. If MCP model:
@@ -84,7 +84,7 @@ Work through the chain top to bottom. Stop at the first success.
 
 After every delegation, report to the user:
 
-```
+```yaml
 category: deep
 model used: GPT-5.3 Codex (medium)
 fallback: none
@@ -92,7 +92,7 @@ fallback: none
 
 If fallback occurred:
 
-```
+```yaml
 category: ultrabrain
 attempted: GPT-5.3 Codex (xhigh) → failed (MCP unavailable)
 model used: Gemini Pro (high)

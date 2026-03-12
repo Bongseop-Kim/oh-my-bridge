@@ -63,7 +63,7 @@ Build a 7-Section delegation prompt:
 | GPT-5.4 (high) / GPT-5-Nano | `mcp__plugin_oh-my-bridge_codex__codex` | OpenAI 공식 MCP |
 | Gemini Pro / Gemini Flash | `mcp__plugin_oh-my-bridge_gemini__gemini` | Gemini CLI 로컬 MCP 브리지 |
 
-```
+```text
 <mcp-tool>({
   prompt: "<7-Section delegation prompt>",
   cwd: "<absolute project path>",
@@ -83,7 +83,7 @@ After the MCP call returns:
 
 Report to the parent session:
 
-```
+```yaml
 category: <category>
 model used: <model>
 fallback path: <attempted models if any>
