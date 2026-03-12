@@ -2,8 +2,8 @@
   "mcpServers": {
     "bridge": {
       "type": "stdio",
-      "command": "node",
-      "args": ["./mcp-servers/bridge/index.js"]
+      "command": "./mcp-servers/bridge/oh-my-bridge",
+      "args": []
     }
   }
 }

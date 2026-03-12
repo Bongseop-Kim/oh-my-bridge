@@ -11,7 +11,7 @@ Remove the code-routing skill from Claude's skills directory.
 
 1. **Confirm with user**
 
-Ask the user: "This will remove oh-my-bridge routing skill from `~/.claude/skills/oh-my-bridge/`. Claude will no longer automatically delegate code generation to Codex or Gemini. Proceed?"
+Ask the user: "This will remove oh-my-bridge routing skills (code-routing, model-routing) from `~/.claude/skills/oh-my-bridge/`. Claude will no longer automatically delegate code generation to Codex or Gemini. Proceed?"
 
 If the user says no, stop.
 
@@ -32,5 +32,5 @@ ls ~/.claude/skills/oh-my-bridge 2>/dev/null && echo "ERROR: directory still exi
 Tell the user:
 - Skill removed from `~/.claude/skills/oh-my-bridge/`
 - **Restart Claude Code** for the change to take effect
-- The plugin itself (MCP server, SubAgent) is still installed — only the routing skill was removed
+- The plugin itself (MCP server Go binary) is still installed — only the routing skills were removed
 - To reinstall, run `/oh-my-bridge:setup`

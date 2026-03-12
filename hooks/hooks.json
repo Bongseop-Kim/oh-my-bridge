@@ -2,7 +2,7 @@
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "mcp__plugin_oh-my-bridge_codex__.*",
+        "matcher": "mcp__bridge__.*",
         "hooks": [
           {
             "type": "command",
