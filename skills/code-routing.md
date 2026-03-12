@@ -1,26 +1,29 @@
 ---
 name: oh-my-bridge:code-routing
-description: "ALWAYS invoke before any code change — routes between Codex (logic/new code) and Claude-native (trivial edits). Do not skip regardless of context length."
+description: "Multi-model router — classifies tasks and delegates to the best available model (Codex, Gemini, GPT-5.4, or Claude-native) via CLI without API keys. Invoke before any code change."
 ---
 
-# Code Generation Routing
+# Multi-Model Code Routing
 
-## Why Codex for code, Claude for orchestration
+## Why multi-model routing
 
-This is not about capability — it's about model personality:
+Each model has a distinct personality suited for different tasks. All external models run as CLI tools — no API key setup required.
 
-| Model | Personality | Prompt style |
-|-------|-------------|--------------|
-| Claude | Mechanics-driven | Detailed checklists, step-by-step procedures, "do exactly this" |
-| Codex (GPT) | Principle-driven | Concise goals, autonomous execution, "achieve this, figure out how" |
+| Model | Personality | Best for |
+|-------|-------------|----------|
+| Claude | Mechanics-driven | Orchestration, trivial edits, direct simple tasks |
+| Codex (GPT) | Principle-driven | Logic-heavy code, refactoring, complex business logic |
+| Gemini Pro | Vision-driven | UI/UX, visual components, layout, design systems |
+| Gemini Flash | Speed-driven | Documentation, boilerplate, fast turnaround |
+| GPT-5.4 | Balanced | High-impact tasks where category is unclear |
 
-Code generation is Codex's domain. Claude's role is to translate user intent into a precise prompt, then verify the result. Claude orchestrates — Codex generates.
+Claude orchestrates — external models generate.
 
 ---
 
-## Routing rule: output is code → delegate to Codex
+## Routing rule: output is code → delegate to external model
 
-**Delegate to Codex** when the result of the task is runnable code:
+**Delegate to external model** when the result of the task is runnable code:
 
 - New file with any logic
 - New function, class, method, or module
@@ -35,13 +38,13 @@ Code generation is Codex's domain. Claude's role is to translate user intent int
 - Documentation or Markdown edit
 - Deleting or moving files
 
-**When in doubt: delegate.** Claude's natural tendency is to handle things directly — resist it. The default for anything touching logic is Codex.
+**When in doubt: delegate.** Claude's natural tendency is to handle things directly — resist it. The default for anything touching logic is external model delegation.
 
 ---
 
 ## After ExitPlanMode
 
-Before executing the first step of an approved plan, apply the routing rules above to each step and decide: Codex or direct?
+Before executing the first step of an approved plan, apply the routing rules above to each step and decide: external model or direct?
 
 Do not follow the plan's implicit implementation assumptions — plans are written before this skill is consulted. Re-evaluate each code-generating step now.
 
@@ -115,7 +118,7 @@ Use the 7-Section format:
 
 ### CONTEXT section: file paths, not inline content
 
-Codex runs with `workspace-write` sandbox and reads files directly. **Do not embed file contents inline.**
+External models run with `workspace-write` sandbox and read files directly. **Do not embed file contents inline.**
 
 ```
 # ❌ BAD — bloated prompt, poor readability, parsing artifacts
@@ -124,7 +127,7 @@ Codex runs with `workspace-write` sandbox and reads files directly. **Do not emb
 import { useLogin } from "@refinedev/core";
 ... (300 lines)
 
-# ✅ GOOD — Codex reads files autonomously
+# ✅ GOOD — model reads files autonomously
 3. CONTEXT:
 - apps/admin/src/pages/login.tsx — fat page to extract from
 - apps/admin/src/features/claims/api/claims-mapper.ts — reference mapper pattern
@@ -159,3 +162,4 @@ fallback: none
 
 - Never pass secrets, API keys, or credentials in the prompt.
 - `cwd` must be the project directory — never `/`, `~`, or `$HOME`.
+- **`bypassApprovals` is dangerous**: only set when `cwd` is an isolated, trusted workspace (e.g., CI sandbox or dedicated git worktree). Never set when `cwd` is a shared or production directory.

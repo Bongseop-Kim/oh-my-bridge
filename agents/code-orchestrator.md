@@ -13,7 +13,7 @@ You are a multi-model code generation orchestrator. Your role is to classify the
 
 ### Step 1 — Classify category
 
-Classify the task using the category table from `oh-my-bridge:model-routing`:
+Classify the task using the category table from `oh-my-bridge:code-routing`:
 
 | Category | When to use |
 |----------|------------|

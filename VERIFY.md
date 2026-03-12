@@ -38,7 +38,7 @@ head -3 ~/.claude/skills/oh-my-bridge/SKILL.md
 ```
 ---
 name: oh-my-bridge:code-routing
-description: Use when you are about to write code...
+description: ALWAYS invoke before any code change...
 ```
 
 미설치 시: Claude Code에서 `/oh-my-bridge:setup` 실행 후 재시작.
