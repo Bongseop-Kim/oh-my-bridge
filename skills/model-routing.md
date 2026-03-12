@@ -12,7 +12,7 @@ After deciding to delegate code generation, use this skill to:
 2. Select the first available model in the fallback chain
 3. Fall back to the next model if the current one fails
 
-Claude is the orchestrator — it does not appear as an external MCP call. When the chain indicates **Claude (native)**, handle the task natively using Edit/Write tools.
+Claude is the orchestrator — it does not appear as an external MCP call. When the chain indicates **Claude (직접)**, handle the task natively using Edit/Write tools.
 
 ---
 
@@ -41,14 +41,14 @@ Work through the chain top to bottom. Stop at the first success.
 
 | Category | 1st | 2nd | 3rd | 4th | 5th |
 |----------|-----|-----|-----|-----|-----|
-| `visual-engineering` | Gemini Pro (high) | Claude (native) | — | — | — |
-| `ultrabrain` | GPT-5.3 Codex (xhigh) | Gemini Pro (high) | Claude (native) | — | — |
-| `deep` | GPT-5.3 Codex (medium) | Claude (native) | Gemini Pro (high) | — | — |
-| `artistry` | Gemini Pro (high) | Claude (native) | GPT-5.4 | — | — |
-| `quick` | Claude (native) | Gemini Flash | GPT-5-Nano | — | — |
-| `writing` | Gemini Flash | Claude (native) | — | — | — |
-| `unspecified-high` | GPT-5.4 (high) | Claude (native) | — | — | — |
-| `unspecified-low` | Claude (native) | GPT-5.3 Codex (medium) | Gemini Flash | — | — |
+| `visual-engineering` | Gemini Pro (high) | Claude (직접) | — | — | — |
+| `ultrabrain` | GPT-5.3 Codex (xhigh) | Gemini Pro (high) | Claude (직접) | — | — |
+| `deep` | GPT-5.3 Codex (medium) | Claude (직접) | Gemini Pro (high) | — | — |
+| `artistry` | Gemini Pro (high) | Claude (직접) | GPT-5.4 | — | — |
+| `quick` | Claude (직접) | Gemini Flash | GPT-5-Nano | — | — |
+| `writing` | Gemini Flash | Claude (직접) | — | — | — |
+| `unspecified-high` | GPT-5.4 (high) | Claude (직접) | — | — | — |
+| `unspecified-low` | Claude (직접) | GPT-5.3 Codex (medium) | Gemini Flash | — | — |
 
 ---
 
@@ -64,7 +64,7 @@ All external models are called via a single unified MCP: `mcp__bridge__delegate`
 | GPT-5-Nano | `gpt-5-nano` | — |
 | Gemini Pro (high) | `gemini-2.5-pro` | — |
 | Gemini Flash | `gemini-2.5-flash` | — |
-| **Claude (native)** | — | Edit/Write directly (no MCP) |
+| **Claude (직접)** | — | Edit/Write directly (no MCP) |
 
 ---
 
@@ -89,7 +89,7 @@ All external models are called via a single unified MCP: `mcp__bridge__delegate`
    ├─ Call MCP tool with 7-Section prompt
    ├─ Success → done
    └─ Failure (error / timeout / unavailable) → move to next in chain
-4. If Claude (native):
+4. If Claude (직접):
    └─ Handle natively with Edit/Write tools
 5. After completion:
    └─ Report: category used, model used, fallback path taken (if any)

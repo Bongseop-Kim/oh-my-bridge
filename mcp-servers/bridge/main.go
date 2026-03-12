@@ -23,8 +23,6 @@ const (
 	maxTimeoutMs         = 300000
 )
 
-var codexOutputFile = filepath.Join(os.TempDir(), "bridge-codex-last.txt")
-
 type delegateInput struct {
 	Prompt          string `json:"prompt" jsonschema:"Task prompt to send to the selected model."`
 	Model           string `json:"model" jsonschema:"Target model. Supported prefixes include gemini-*, gpt-*, codex-*, and o*."`
@@ -199,13 +197,21 @@ func runGemini(ctx context.Context, opts runOptions) (cliResult, error) {
 }
 
 func runCodex(ctx context.Context, opts runOptions) (cliResult, error) {
+	f, err := os.CreateTemp("", "bridge-codex-*.txt")
+	if err != nil {
+		return cliResult{}, err
+	}
+	f.Close()
+	outputFile := f.Name()
+	defer os.Remove(outputFile)
+
 	args := []string{
 		"exec",
 		"-m",
 		opts.Model,
 		"--dangerously-bypass-approvals-and-sandbox",
 		"-o",
-		codexOutputFile,
+		outputFile,
 	}
 
 	if strings.TrimSpace(opts.ReasoningEffort) != "" {
@@ -230,7 +236,7 @@ func runCodex(ctx context.Context, opts runOptions) (cliResult, error) {
 		return result, nil
 	}
 
-	data, readErr := os.ReadFile(codexOutputFile)
+	data, readErr := os.ReadFile(outputFile)
 	if readErr == nil {
 		if text := strings.TrimSpace(string(data)); text != "" {
 			return cliResult{Text: text}, nil

@@ -45,7 +45,7 @@ Classify the task using the category table from `oh-my-bridge:model-routing`:
 
 Build a 7-Section delegation prompt:
 
-```
+```text
 1. TASK: [One atomic, specific goal sentence]
 2. EXPECTED OUTCOME: [Success criteria]
 3. CONTEXT: [Current state, relevant file paths/snippets, background]

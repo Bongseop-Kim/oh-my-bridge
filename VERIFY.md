@@ -64,7 +64,7 @@ tail -1 ~/.claude/logs/codex-usage.log | jq .
 }
 ```
 
-처음 설치 직후에는 파일이 없다. Codex를 한 번 호출하면 생성된다.
+처음 설치 직후에는 파일이 없다. bridge(delegate)를 한 번 호출하면 생성된다.
 
 ---
 
