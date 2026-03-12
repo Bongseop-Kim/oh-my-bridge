@@ -8,6 +8,7 @@
 #   .claude-plugin/plugin.json          (version)
 #   .claude-plugin/marketplace.json     (metadata.version + plugins[0].version)
 #   CLAUDE.md                           (캐시 경로의 버전 문자열)
+#   mcp-servers/bridge/main.go          (serverVersion)
 
 set -euo pipefail
 
@@ -21,6 +22,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_JSON="${SCRIPT_DIR}/.claude-plugin/plugin.json"
 MARKETPLACE_JSON="${SCRIPT_DIR}/.claude-plugin/marketplace.json"
 CLAUDE_MD="${SCRIPT_DIR}/CLAUDE.md"
+MAIN_GO="${SCRIPT_DIR}/mcp-servers/bridge/main.go"
 
 # 현재 버전 감지
 CURRENT_VERSION=$(jq -r '.version' "$PLUGIN_JSON")
@@ -46,11 +48,20 @@ if grep -q "$CURRENT_VERSION" "$CLAUDE_MD"; then
   echo "  Updated: $CLAUDE_MD"
 fi
 
+# main.go — serverVersion 업데이트
+if grep -q "serverVersion" "$MAIN_GO"; then
+  sed -i '' "s/serverVersion *= *\"${CURRENT_VERSION}\"/serverVersion = \"${NEW_VERSION}\"/" "$MAIN_GO"
+  echo "  Updated: $MAIN_GO (serverVersion)"
+else
+  echo "  Warning: serverVersion not found in $MAIN_GO — skipping"
+fi
+
 echo "  Committing and tagging v${NEW_VERSION}..."
 git -C "$SCRIPT_DIR" add \
   "${PLUGIN_JSON}" \
   "${MARKETPLACE_JSON}" \
-  "${CLAUDE_MD}"
+  "${CLAUDE_MD}" \
+  "${MAIN_GO}"
 git -C "$SCRIPT_DIR" commit -m "chore: bump version to ${NEW_VERSION}"
 git -C "$SCRIPT_DIR" tag "v${NEW_VERSION}"
 
