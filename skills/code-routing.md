@@ -9,13 +9,13 @@ description: "Multi-model router — classifies tasks and delegates to the best 
 
 Each model has a distinct personality suited for different tasks. All external models run as CLI tools — no API key setup required.
 
-| Model | Personality | Best for |
-|-------|-------------|----------|
-| Claude | Mechanics-driven | Orchestration, trivial edits, direct simple tasks |
-| Codex (GPT) | Principle-driven | Logic-heavy code, refactoring, complex business logic |
-| Gemini Pro | Vision-driven | UI/UX, visual components, layout, design systems |
-| Gemini Flash | Speed-driven | Documentation, boilerplate, fast turnaround |
-| GPT-5.4 | Balanced | High-impact tasks where category is unclear |
+| Model        | Personality      | Best for                                              |
+| ------------ | ---------------- | ----------------------------------------------------- |
+| Claude       | Mechanics-driven | Orchestration, trivial edits, direct simple tasks     |
+| Codex (GPT)  | Principle-driven | Logic-heavy code, refactoring, complex business logic |
+| Gemini Pro   | Vision-driven    | UI/UX, visual components, layout, design systems      |
+| Gemini Flash | Speed-driven     | Documentation, boilerplate, fast turnaround           |
+| GPT-5.4      | Balanced         | High-impact tasks where category is unclear           |
 
 Claude orchestrates — external models generate.
 
@@ -58,16 +58,16 @@ Before calling `mcp__bridge__delegate`, classify the task and set the `category`
 
 Pick the single best-matching category:
 
-| Category | When to use |
-|----------|------------|
-| `visual-engineering` | UI components, CSS, SVG, layout, animation, design systems |
-| `ultrabrain` | Algorithm design, complex architecture, mathematical optimization, deep reasoning |
-| `deep` | Refactoring, multi-file logic changes, complex business logic |
-| `artistry` | Creative patterns, expressive code style, novel design approaches |
-| `quick` | Boilerplate, simple functions, stubs, scaffolding |
-| `writing` | Documentation, comments, README, changelogs |
-| `unspecified-high` | Unclear category, but high complexity or high impact |
-| `unspecified-low` | Unclear category, low complexity or low impact |
+| Category             | When to use                                                                       |
+| -------------------- | --------------------------------------------------------------------------------- |
+| `visual-engineering` | UI components, CSS, SVG, layout, animation, design systems                        |
+| `ultrabrain`         | Algorithm design, complex architecture, mathematical optimization, deep reasoning |
+| `deep`               | Refactoring, multi-file logic changes, complex business logic                     |
+| `artistry`           | Creative patterns, expressive code style, novel design approaches                 |
+| `quick`              | Boilerplate, simple functions, stubs, scaffolding                                 |
+| `writing`            | Documentation, comments, README, changelogs                                       |
+| `unspecified-high`   | Unclear category, but high complexity or high impact                              |
+| `unspecified-low`    | Unclear category, low complexity or low impact                                    |
 
 **When in doubt between `unspecified-high` and `unspecified-low`:** prefer `unspecified-high`.
 
@@ -107,7 +107,7 @@ import { useLogin } from "@refinedev/core";
 
 Exception: paste short type definitions inline when field-level accuracy is critical (e.g., strict TypeScript contracts).
 
-```
+```text
 mcp__bridge__delegate({
   prompt: "<7-Section delegation prompt>",
   category: "<category from classification above>",
@@ -121,7 +121,6 @@ mcp__bridge__delegate({
 
 1. Use `Read` to verify generated files exist and look correct.
 2. Report a one-line summary:
-
    - 정상 응답: **`{model} · {latency_ms/1000}s · success`** (예: `gpt-5.3-codex · 23s · success`)
    - `action: claude` 응답: **`claude · direct`**
 

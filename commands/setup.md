@@ -61,18 +61,18 @@ mkdir -p ~/.claude/skills/oh-my-bridge
 cp "${CLAUDE_PLUGIN_ROOT}/skills/code-routing.md" ~/.claude/skills/oh-my-bridge/SKILL.md
 ```
 
-3.5. **Generate config**
+4. **Generate config**
 
 ```bash
 CONFIG_DIR="$HOME/.config/oh-my-bridge"
 CONFIG_FILE="$CONFIG_DIR/config.json"
 mkdir -p "$CONFIG_DIR"
 
-# Warn if existing config will be overwritten
+# Back up existing config before overwriting
 if [ -f "$CONFIG_FILE" ]; then
-  echo "⚠️  Existing config will be overwritten."
-  echo "    If you have custom settings, back up first:"
-  echo "    cp $CONFIG_FILE $CONFIG_FILE.bak"
+  BACKUP="${CONFIG_FILE}.$(date +%Y%m%dT%H%M%S).bak"
+  cp "$CONFIG_FILE" "$BACKUP"
+  echo "⚠️  Existing config backed up to: $BACKUP"
 fi
 
 # Always write default config
@@ -102,7 +102,7 @@ CONF
 echo "OK: config written to $CONFIG_FILE"
 ```
 
-4. **Verify installation**
+5. **Verify installation**
 
 ```bash
 # Verify Go binary
@@ -134,7 +134,7 @@ description: ...
 }
 ```
 
-5. **Report to user**
+6. **Report to user**
 
 Tell the user:
 - Skill installed to `~/.claude/skills/oh-my-bridge/SKILL.md`

@@ -12,6 +12,15 @@
 
 set -euo pipefail
 
+# Portable in-place sed: macOS requires 'sed -i ""', Linux requires 'sed -i'
+sed_inplace() {
+  if [[ "$OSTYPE" == darwin* ]]; then
+    sed -i '' "$@"
+  else
+    sed -i "$@"
+  fi
+}
+
 NEW_VERSION="${1:-}"
 if [[ -z "$NEW_VERSION" ]]; then
   echo "Usage: ./bump-version.sh <new-version>"
@@ -44,24 +53,26 @@ echo "  Updated: $MARKETPLACE_JSON (metadata.version + plugins[0].version)"
 
 # CLAUDE.md — 캐시 경로 버전 문자열 업데이트
 if grep -q "$CURRENT_VERSION" "$CLAUDE_MD"; then
-  sed -i '' "s/${CURRENT_VERSION}/${NEW_VERSION}/g" "$CLAUDE_MD"
+  sed_inplace "s/${CURRENT_VERSION}/${NEW_VERSION}/g" "$CLAUDE_MD"
   echo "  Updated: $CLAUDE_MD"
 fi
 
 # main.go — serverVersion 업데이트
+MAIN_GO_UPDATED=false
 if grep -q "serverVersion" "$MAIN_GO"; then
-  sed -i '' "s/serverVersion *= *\"${CURRENT_VERSION}\"/serverVersion = \"${NEW_VERSION}\"/" "$MAIN_GO"
+  sed_inplace "s/serverVersion *= *\"${CURRENT_VERSION}\"/serverVersion = \"${NEW_VERSION}\"/" "$MAIN_GO"
   echo "  Updated: $MAIN_GO (serverVersion)"
+  MAIN_GO_UPDATED=true
 else
   echo "  Warning: serverVersion not found in $MAIN_GO — skipping"
 fi
 
 echo "  Committing and tagging v${NEW_VERSION}..."
-git -C "$SCRIPT_DIR" add \
-  "${PLUGIN_JSON}" \
-  "${MARKETPLACE_JSON}" \
-  "${CLAUDE_MD}" \
-  "${MAIN_GO}"
+GIT_ADD_FILES=("${PLUGIN_JSON}" "${MARKETPLACE_JSON}" "${CLAUDE_MD}")
+if [[ "$MAIN_GO_UPDATED" == true ]]; then
+  GIT_ADD_FILES+=("${MAIN_GO}")
+fi
+git -C "$SCRIPT_DIR" add "${GIT_ADD_FILES[@]}"
 git -C "$SCRIPT_DIR" commit -m "chore: bump version to ${NEW_VERSION}"
 git -C "$SCRIPT_DIR" tag "v${NEW_VERSION}"
 

@@ -40,6 +40,9 @@ type ModelDef struct {
 var (
 	cfg           Config
 	availableCLIs map[string]bool
+
+	// ErrTimeout is returned by runCli when the context deadline is exceeded.
+	ErrTimeout = errors.New("cli timeout")
 )
 
 type delegateInput struct {
@@ -167,7 +170,7 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 		})
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
-				&mcp.TextContent{Text: mustJSON(out)},
+				&mcp.TextContent{Text: toJSONOrEmpty(out)},
 			},
 		}, out, nil
 	}
@@ -216,7 +219,7 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 		err = fmt.Errorf("unsupported command %q for model %q", modelDef.Command, modelName)
 	}
 	if err != nil {
-		timedOut := strings.Contains(err.Error(), "timed out")
+		timedOut := errors.Is(err, ErrTimeout)
 		writeLog(logEntry{
 			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 			Model:     modelName,
@@ -429,7 +432,7 @@ func runCli(parent context.Context, req cliRequest) (cliResult, error) {
 
 	err := cmd.Run()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return cliResult{}, fmt.Errorf("%s timed out after %dms", req.ErrorPrefix, req.TimeoutMs)
+		return cliResult{}, fmt.Errorf("%w: %s timed out after %dms", ErrTimeout, req.ErrorPrefix, req.TimeoutMs)
 	}
 	if err != nil {
 		var exitErr *exec.ExitError
@@ -479,7 +482,7 @@ func writeLog(entry logEntry) {
 	}()
 }
 
-func mustJSON(v any) string {
+func toJSONOrEmpty(v any) string {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return "{}"
