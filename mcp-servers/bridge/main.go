@@ -119,6 +119,18 @@ func detectCLIs() {
 }
 
 func main() {
+	// config 서브커맨드 분기 — MCP 서버 기동 전에 처리
+	if len(os.Args) > 1 && os.Args[1] == "config" {
+		if err := loadConfig(); err != nil {
+			fmt.Fprintf(os.Stderr, "oh-my-bridge: config load error: %v\n", err)
+			os.Exit(1)
+		}
+		detectCLIs()
+		runConfigCommand(os.Args[2:])
+		return
+	}
+
+	// MCP 서버 모드 (기존 동작)
 	if err := loadConfig(); err != nil {
 		log.Fatalf("oh-my-bridge: %v", err)
 	}
