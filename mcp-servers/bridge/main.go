@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -32,6 +33,8 @@ type delegateInput struct {
 	TimeoutMs       int    `json:"timeoutMs,omitempty" jsonschema:"Optional timeout in milliseconds. Maximum 300000."`
 	ReasoningEffort string `json:"reasoning_effort,omitempty" jsonschema:"Optional reasoning effort passed through to Codex."`
 	BypassApprovals bool   `json:"bypassApprovals,omitempty" jsonschema:"If true, passes --dangerously-bypass-approvals-and-sandbox to Codex. Use only in trusted, sandboxed contexts."`
+	Category        string `json:"category,omitempty" jsonschema:"Task category from routing skill (e.g. deep, quick, visual-engineering). Optional, used for logging."`
+	IsFallback      bool   `json:"is_fallback,omitempty" jsonschema:"True if this call is a fallback attempt after a previous model failed."`
 }
 
 type delegateOutput struct {
@@ -39,6 +42,20 @@ type delegateOutput struct {
 	CWD      string `json:"cwd" jsonschema:"Resolved working directory used for the CLI invocation."`
 	Model    string `json:"model" jsonschema:"Model identifier used for the CLI invocation."`
 	Provider string `json:"provider" jsonschema:"Resolved CLI provider name."`
+	LatencyMs int64 `json:"latency_ms" jsonschema:"CLI execution time in milliseconds."`
+	TimedOut  bool  `json:"timed_out" jsonschema:"True if the CLI invocation exceeded its timeout."`
+}
+
+type logEntry struct {
+	Timestamp  string `json:"timestamp"`
+	Model      string `json:"model"`
+	Provider   string `json:"provider"`
+	Category   string `json:"category,omitempty"`
+	IsFallback bool   `json:"is_fallback"`
+	LatencyMs  int64  `json:"latency_ms"`
+	TimedOut   bool   `json:"timed_out"`
+	Status     string `json:"status"`
+	Error      string `json:"error,omitempty"`
 }
 
 // cliResult holds the text output from a CLI invocation.
@@ -95,6 +112,7 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 		timeoutMs = defaultTimeout(provider)
 	}
 
+	start := time.Now()
 	var result cliResult
 	switch provider {
 	case "gemini":
@@ -117,15 +135,39 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 		err = fmt.Errorf("unsupported provider %q", provider)
 	}
 	if err != nil {
+		timedOut := strings.Contains(err.Error(), "timed out")
+		writeLog(logEntry{
+			Timestamp:  time.Now().UTC().Format(time.RFC3339Nano),
+			Model:      input.Model,
+			Provider:   provider,
+			Category:   input.Category,
+			IsFallback: input.IsFallback,
+			LatencyMs:  time.Since(start).Milliseconds(),
+			TimedOut:   timedOut,
+			Status:     "error",
+			Error:      err.Error(),
+		})
 		return nil, delegateOutput{}, err
 	}
 
 	output := delegateOutput{
-		Response: result.Text,
-		CWD:      resolvedCwd,
-		Model:    input.Model,
-		Provider: provider,
+		Response:  result.Text,
+		CWD:       resolvedCwd,
+		Model:     input.Model,
+		Provider:  provider,
+		LatencyMs: time.Since(start).Milliseconds(),
+		TimedOut:  false,
 	}
+	writeLog(logEntry{
+		Timestamp:  time.Now().UTC().Format(time.RFC3339Nano),
+		Model:      input.Model,
+		Provider:   provider,
+		Category:   input.Category,
+		IsFallback: input.IsFallback,
+		LatencyMs:  output.LatencyMs,
+		TimedOut:   false,
+		Status:     "success",
+	})
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
@@ -315,4 +357,28 @@ func runCli(parent context.Context, req cliRequest) (cliResult, error) {
 	}
 
 	return cliResult{Text: strings.TrimSpace(stdout.String())}, nil
+}
+
+func writeLog(entry logEntry) {
+	go func() {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return
+		}
+		logDir := filepath.Join(home, ".claude", "logs")
+		if err := os.MkdirAll(logDir, 0755); err != nil {
+			return
+		}
+		logPath := filepath.Join(logDir, "oh-my-bridge.log")
+		f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			return
+		}
+		defer f.Close()
+		data, err := json.Marshal(entry)
+		if err != nil {
+			return
+		}
+		f.Write(append(data, '\n'))
+	}()
 }

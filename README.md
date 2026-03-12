@@ -62,7 +62,6 @@ gemini --version
 자동으로 처리됨:
 - `~/.claude.json` — bridge MCP 서버 등록
 - `agents/code-orchestrator.md` — SubAgent 등록
-- `hooks/hooks.json` — PostToolUse 로깅 훅 바인딩
 
 ### Phase 2 — Skill 설치
 
@@ -144,13 +143,13 @@ Claude가 Edit 직접 사용. MCP 미호출.
 
 ```bash
 # 최근 5건
-tail -5 ~/.claude/logs/codex-usage.log | jq .
+tail -5 ~/.claude/logs/oh-my-bridge.log | jq .
 
 # 에러만
-jq 'select(.status == "error")' ~/.claude/logs/codex-usage.log
+jq 'select(.status == "error")' ~/.claude/logs/oh-my-bridge.log
 
 # 오늘 사용량
-jq 'select(.timestamp | startswith("'"$(date -u +%Y-%m-%d)"'"))' ~/.claude/logs/codex-usage.log
+jq 'select(.timestamp | startswith("'"$(date -u +%Y-%m-%d)"'"))' ~/.claude/logs/oh-my-bridge.log
 ```
 
 ---
@@ -175,9 +174,6 @@ oh-my-bridge/
 ├── commands/
 │   ├── setup.md             /oh-my-bridge:setup
 │   └── uninstall.md         /oh-my-bridge:uninstall
-├── hooks/
-│   ├── hooks.json
-│   └── log-codex-usage.sh
 ├── skills/
 │   └── code-routing.md      위임 여부 판단 + 모델 선택 (Fallback Chain 통합)
 └── bump-version.sh

@@ -45,7 +45,7 @@ gemini --version
 cp skills/code-routing.md ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/2.2.0/skills/code-routing.md
 
 # 사용 로그
-tail -5 ~/.claude/logs/codex-usage.log | jq .
+tail -5 ~/.claude/logs/oh-my-bridge.log | jq .
 ```
 
 ## Skill 동작 방식

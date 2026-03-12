@@ -45,22 +45,25 @@ description: ALWAYS invoke before any code change...
 
 ---
 
-## 4. Hook 로그 확인
+## 4. 로그 확인
 
 bridge MCP를 호출한 적 있다면:
 
 ```bash
-tail -1 ~/.claude/logs/codex-usage.log | jq .
+tail -1 ~/.claude/logs/oh-my-bridge.log | jq .
 ```
 
 **정상 출력 예시:**
 ```json
 {
   "timestamp": "2026-03-03T08:00:00Z",
-  "tool": "mcp__bridge__delegate",
-  "status": "success",
-  "exit_code": "",
-  "error": ""
+  "model": "gpt-5.3-codex",
+  "provider": "codex",
+  "category": "deep",
+  "is_fallback": false,
+  "latency_ms": 23450,
+  "timed_out": false,
+  "status": "success"
 }
 ```
 
@@ -87,7 +90,7 @@ Claude Code 세션에서:
 확인 항목:
 1. `mcp__bridge__delegate` 도구가 호출됨 (Edit/Write 아닌)
 2. UI에 "Error" 문구 없음
-3. 로그 항목 추가 확인: `tail -1 ~/.claude/logs/codex-usage.log | jq .`
+3. 로그 항목 추가 확인: `tail -1 ~/.claude/logs/oh-my-bridge.log | jq .`
 
 ### 단순 편집 — 직접 처리 확인
 
@@ -105,7 +108,7 @@ README.md 첫 줄 오타 수정해줘
 echo "=== Skill ===" && \
   head -3 ~/.claude/skills/oh-my-bridge/SKILL.md 2>/dev/null || echo "(미설치 — /oh-my-bridge:setup 실행 필요)" && \
 echo "=== Hook Log ===" && \
-  tail -1 ~/.claude/logs/codex-usage.log 2>/dev/null | jq . || echo "(아직 로그 없음)"
+  tail -1 ~/.claude/logs/oh-my-bridge.log 2>/dev/null | jq . || echo "(아직 로그 없음)"
 ```
 
 MCP 연결과 SubAgent는 Claude Code 내에서 `/mcp`, `/agents`로 직접 확인.

@@ -141,22 +141,24 @@ mcp__bridge__delegate({
   prompt: "<7-Section delegation prompt>",
   model: "<model param from table above>",
   cwd: "<absolute project path>",
-  reasoning_effort: "<effort if applicable, omit otherwise>"
+  reasoning_effort: "<effort if applicable, omit otherwise>",
+  category: "<category from classification above>",
+  is_fallback: false
 })
 ```
 
 ## After delegation
 
 1. Use `Read` to verify generated files exist and look correct.
-2. Report to the user: file list + key decisions made + model used + fallback path (if any).
+2. Report a one-line summary from the response fields:
 
-```yaml
-category: deep
-model used: GPT-5.3 Codex (medium)
-fallback: none
-```
+   **`{Model} · {latency_ms/1000}s · {status}`**
 
-3. If MCP fails: move to the next model in the fallback chain. Do not retry the same model.
+   Example: `GPT-5.3 Codex · 23s · success`
+
+   Then report: file list + key decisions made.
+
+3. If MCP fails: move to the next model in the fallback chain with `is_fallback: true`. Do not retry the same model.
 
 ## Security
 
