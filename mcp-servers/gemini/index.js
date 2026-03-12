@@ -21,32 +21,8 @@ function resolveCwd(cwd) {
   return target;
 }
 
-function extractText(payload) {
-  if (typeof payload?.response === "string" && payload.response.trim()) {
-    return payload.response.trim();
-  }
-
-  if (typeof payload?.text === "string" && payload.text.trim()) {
-    return payload.text.trim();
-  }
-
-  const parts = payload?.candidates?.[0]?.content?.parts;
-  if (Array.isArray(parts)) {
-    const joined = parts
-      .map((part) => (typeof part?.text === "string" ? part.text : ""))
-      .join("")
-      .trim();
-
-    if (joined) {
-      return joined;
-    }
-  }
-
-  throw new Error("Gemini CLI JSON response did not contain a text field");
-}
-
 async function runGemini({ prompt, cwd, model, timeoutMs }) {
-  const args = ["-p", prompt, "--yolo", "--output-format", "json"];
+  const args = ["-p", prompt, "--yolo"];
   if (model) {
     args.push("-m", model);
   }
@@ -101,16 +77,7 @@ async function runGemini({ prompt, cwd, model, timeoutMs }) {
         return;
       }
 
-      try {
-        const payload = JSON.parse(stdout);
-        resolve({
-          text: extractText(payload),
-          raw: payload,
-        });
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error);
-        reject(new Error(`Failed to parse Gemini CLI JSON output: ${reason}`));
-      }
+      resolve({ text: stdout.trim() || "(done)" });
     });
   });
 }
@@ -157,7 +124,6 @@ server.tool(
         response: result.text,
         cwd: resolvedCwd,
         model: model ?? null,
-        raw: result.raw,
       },
     };
   },
