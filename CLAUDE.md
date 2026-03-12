@@ -44,6 +44,9 @@ gemini --version
 # 캐시 직접 동기화 (버전 업 전 급할 때, 현재 버전: 2.2.0)
 cp skills/code-routing.md ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/2.2.0/skills/code-routing.md
 
+# config 확인/편집
+cat ~/.config/oh-my-bridge/config.json | jq .
+
 # 사용 로그
 tail -5 ~/.claude/logs/oh-my-bridge.log | jq .
 ```
@@ -52,8 +55,9 @@ tail -5 ~/.claude/logs/oh-my-bridge.log | jq .
 
 `/oh-my-bridge:setup` 실행 후 Claude는 `~/.claude/skills/oh-my-bridge/SKILL.md`를 세션마다 자동으로 읽는다.
 
-- **코드 생성 작업** (새 파일, 함수/클래스 구현, 리팩토링) → `mcp__bridge__delegate` 호출 (model은 code-routing skill의 Fallback Chain이 결정)
+- **코드 생성 작업** (새 파일, 함수/클래스 구현, 리팩토링) → `mcp__bridge__delegate` 호출 (`category` 필수, 바이너리가 `~/.config/oh-my-bridge/config.json`에서 모델 결정)
 - **단순 편집** (오타, 한 줄 변경, config, 문서) → Claude 네이티브 Edit/Write 직접 사용
+- **claude 응답** (`action: "claude"`) → Claude가 직접 처리 (route가 claude이거나 CLI 미설치)
 
 MCP 호출 후에는 `Read` 도구로 생성 파일을 확인하고 결과를 보고한다.
 

@@ -7,11 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -20,52 +18,109 @@ import (
 
 const (
 	serverName           = "oh-my-bridge"
-	serverVersion        = "2.1.0"
+	serverVersion        = "2.2.0"
 	defaultGeminiTimeout = 120000
 	defaultCodexTimeout  = 180000
 	maxTimeoutMs         = 300000
 )
 
+// Config is loaded from ~/.config/oh-my-bridge/config.json at startup.
+type Config struct {
+	Routes map[string]string     `json:"routes"`
+	Models map[string]ModelDef   `json:"models"`
+}
+
+// ModelDef describes how to invoke a specific model via CLI.
+type ModelDef struct {
+	Command         string   `json:"command"`
+	Args            []string `json:"args"`
+	ReasoningEffort string   `json:"reasoning_effort,omitempty"`
+}
+
+var (
+	cfg           Config
+	availableCLIs map[string]bool
+)
+
 type delegateInput struct {
 	Prompt          string `json:"prompt" jsonschema:"Task prompt to send to the selected model."`
-	Model           string `json:"model" jsonschema:"Target model identifier. Must be one of the exact model names in the MCP Tool Mapping table (e.g. gpt-5.3-codex, gpt-5.4, gpt-5-nano, gemini-2.5-pro, gemini-2.5-flash)."`
+	Category        string `json:"category" jsonschema:"Task category (required): visual-engineering, ultrabrain, deep, artistry, quick, writing, unspecified-high, unspecified-low"`
+	Model           string `json:"model,omitempty" jsonschema:"Optional model override. Bypasses config route lookup."`
 	CWD             string `json:"cwd,omitempty" jsonschema:"Optional working directory, constrained to the configured workspace root."`
 	TimeoutMs       int    `json:"timeoutMs,omitempty" jsonschema:"Optional timeout in milliseconds. Maximum 300000."`
-	ReasoningEffort string `json:"reasoning_effort,omitempty" jsonschema:"Optional reasoning effort passed through to Codex."`
+	ReasoningEffort string `json:"reasoning_effort,omitempty" jsonschema:"Optional reasoning effort override. Overrides config default."`
 	BypassApprovals bool   `json:"bypassApprovals,omitempty" jsonschema:"If true, passes --dangerously-bypass-approvals-and-sandbox to Codex. Use only in trusted, sandboxed contexts."`
-	Category        string `json:"category,omitempty" jsonschema:"Task category from routing skill (e.g. deep, quick, visual-engineering). Optional, used for logging."`
-	IsFallback      bool   `json:"is_fallback,omitempty" jsonschema:"True if this call is a fallback attempt after a previous model failed."`
 }
 
 type delegateOutput struct {
-	Response string `json:"response" jsonschema:"Model response text."`
-	CWD      string `json:"cwd" jsonschema:"Resolved working directory used for the CLI invocation."`
-	Model    string `json:"model" jsonschema:"Model identifier used for the CLI invocation."`
-	Provider string `json:"provider" jsonschema:"Resolved CLI provider name."`
-	LatencyMs int64 `json:"latency_ms" jsonschema:"CLI execution time in milliseconds."`
-	TimedOut  bool  `json:"timed_out" jsonschema:"True if the CLI invocation exceeded its timeout."`
+	Action    string `json:"action,omitempty" jsonschema:"'claude' when route is configured as claude or CLI not installed — handle directly."`
+	Response  string `json:"response,omitempty" jsonschema:"Model response text."`
+	CWD       string `json:"cwd,omitempty" jsonschema:"Resolved working directory used for the CLI invocation."`
+	Model     string `json:"model,omitempty" jsonschema:"Model identifier used for the CLI invocation."`
+	Category  string `json:"category,omitempty" jsonschema:"Task category used for route resolution."`
+	Provider  string `json:"provider,omitempty" jsonschema:"Resolved CLI provider name."`
+	LatencyMs int64  `json:"latency_ms,omitempty" jsonschema:"CLI execution time in milliseconds."`
+	TimedOut  bool   `json:"timed_out,omitempty" jsonschema:"True if the CLI invocation exceeded its timeout."`
+	Reason    string `json:"reason,omitempty" jsonschema:"Reason for claude action."`
 }
 
 type logEntry struct {
-	Timestamp  string `json:"timestamp"`
-	Model      string `json:"model"`
-	Provider   string `json:"provider"`
-	Category   string `json:"category,omitempty"`
-	IsFallback bool   `json:"is_fallback"`
-	LatencyMs  int64  `json:"latency_ms"`
-	TimedOut   bool   `json:"timed_out"`
-	Status     string `json:"status"`
-	Error      string `json:"error,omitempty"`
+	Timestamp string `json:"timestamp"`
+	Model     string `json:"model"`
+	Provider  string `json:"provider"`
+	Category  string `json:"category,omitempty"`
+	LatencyMs int64  `json:"latency_ms"`
+	TimedOut  bool   `json:"timed_out"`
+	Status    string `json:"status"`
+	Error     string `json:"error,omitempty"`
 }
 
 // cliResult holds the text output from a CLI invocation.
-// Kept as a struct (rather than a plain string) to allow future fields
-// such as exit code or elapsed time without breaking call sites.
 type cliResult struct {
 	Text string
 }
 
+func loadConfig() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("cannot determine home directory: %w", err)
+	}
+	configPath := filepath.Join(home, ".config", "oh-my-bridge", "config.json")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("config not found at %s — run /oh-my-bridge:setup to create it", configPath)
+		}
+		return fmt.Errorf("reading config: %w", err)
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return fmt.Errorf("parsing config: %w", err)
+	}
+	return nil
+}
+
+func detectCLIs() {
+	seen := make(map[string]bool)
+	availableCLIs = make(map[string]bool)
+	for _, def := range cfg.Models {
+		if seen[def.Command] {
+			continue
+		}
+		seen[def.Command] = true
+		_, err := exec.LookPath(def.Command)
+		availableCLIs[def.Command] = (err == nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "oh-my-bridge: CLI not found: %q — routes using it will be skipped\n", def.Command)
+		}
+	}
+}
+
 func main() {
+	if err := loadConfig(); err != nil {
+		log.Fatalf("oh-my-bridge: %v", err)
+	}
+	detectCLIs()
+
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    serverName,
 		Version: serverVersion,
@@ -85,19 +140,39 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 	if strings.TrimSpace(input.Prompt) == "" {
 		return nil, delegateOutput{}, errors.New("prompt is required")
 	}
-	if strings.TrimSpace(input.Model) == "" {
-		return nil, delegateOutput{}, errors.New("model is required")
+	if strings.TrimSpace(input.Category) == "" {
+		return nil, delegateOutput{}, errors.New("category is required")
 	}
 	if input.TimeoutMs < 0 || input.TimeoutMs > maxTimeoutMs {
 		return nil, delegateOutput{}, fmt.Errorf("timeoutMs must be between 0 and %d", maxTimeoutMs)
 	}
 
-	workspaceRoot, err := getWorkspaceRoot()
+	modelName, modelDef, skip, err := resolveModel(input.Category, input.Model)
 	if err != nil {
 		return nil, delegateOutput{}, err
 	}
+	if skip {
+		reason := "Route configured as claude or CLI not installed. Handle directly."
+		out := delegateOutput{
+			Action:   "claude",
+			Category: input.Category,
+			Reason:   reason,
+		}
+		writeLog(logEntry{
+			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+			Model:     "claude",
+			Provider:  "claude",
+			Category:  input.Category,
+			Status:    "claude",
+		})
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: mustJSON(out)},
+			},
+		}, out, nil
+	}
 
-	provider, err := getProvider(input.Model)
+	workspaceRoot, err := getWorkspaceRoot()
 	if err != nil {
 		return nil, delegateOutput{}, err
 	}
@@ -109,43 +184,48 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 
 	timeoutMs := input.TimeoutMs
 	if timeoutMs == 0 {
-		timeoutMs = defaultTimeout(provider)
+		timeoutMs = defaultTimeout(modelDef.Command)
+	}
+
+	// Per-call reasoning_effort overrides config default.
+	reasoningEffort := input.ReasoningEffort
+	if reasoningEffort == "" {
+		reasoningEffort = modelDef.ReasoningEffort
 	}
 
 	start := time.Now()
 	var result cliResult
-	switch provider {
-	case "gemini":
-		result, err = runGemini(ctx, runOptions{
-			Prompt:    input.Prompt,
-			CWD:       resolvedCwd,
-			Model:     input.Model,
-			TimeoutMs: timeoutMs,
-		})
+	switch modelDef.Command {
 	case "codex":
 		result, err = runCodex(ctx, runOptions{
 			Prompt:          input.Prompt,
 			CWD:             resolvedCwd,
-			Model:           input.Model,
-			ReasoningEffort: input.ReasoningEffort,
+			ModelDef:        modelDef,
+			ReasoningEffort: reasoningEffort,
 			BypassApprovals: input.BypassApprovals,
 			TimeoutMs:       timeoutMs,
 		})
+	case "gemini":
+		result, err = runGemini(ctx, runOptions{
+			Prompt:    input.Prompt,
+			CWD:       resolvedCwd,
+			ModelDef:  modelDef,
+			TimeoutMs: timeoutMs,
+		})
 	default:
-		err = fmt.Errorf("unsupported provider %q", provider)
+		err = fmt.Errorf("unsupported command %q for model %q", modelDef.Command, modelName)
 	}
 	if err != nil {
 		timedOut := strings.Contains(err.Error(), "timed out")
 		writeLog(logEntry{
-			Timestamp:  time.Now().UTC().Format(time.RFC3339Nano),
-			Model:      input.Model,
-			Provider:   provider,
-			Category:   input.Category,
-			IsFallback: input.IsFallback,
-			LatencyMs:  time.Since(start).Milliseconds(),
-			TimedOut:   timedOut,
-			Status:     "error",
-			Error:      err.Error(),
+			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+			Model:     modelName,
+			Provider:  modelDef.Command,
+			Category:  input.Category,
+			LatencyMs: time.Since(start).Milliseconds(),
+			TimedOut:  timedOut,
+			Status:    "error",
+			Error:     err.Error(),
 		})
 		return nil, delegateOutput{}, err
 	}
@@ -153,20 +233,19 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 	output := delegateOutput{
 		Response:  result.Text,
 		CWD:       resolvedCwd,
-		Model:     input.Model,
-		Provider:  provider,
+		Model:     modelName,
+		Category:  input.Category,
+		Provider:  modelDef.Command,
 		LatencyMs: time.Since(start).Milliseconds(),
 		TimedOut:  false,
 	}
 	writeLog(logEntry{
-		Timestamp:  time.Now().UTC().Format(time.RFC3339Nano),
-		Model:      input.Model,
-		Provider:   provider,
-		Category:   input.Category,
-		IsFallback: input.IsFallback,
-		LatencyMs:  output.LatencyMs,
-		TimedOut:   false,
-		Status:     "success",
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		Model:     modelName,
+		Provider:  modelDef.Command,
+		Category:  input.Category,
+		LatencyMs: output.LatencyMs,
+		Status:    "success",
 	})
 
 	return &mcp.CallToolResult{
@@ -176,17 +255,49 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 	}, output, nil
 }
 
+// resolveModel returns the model name, its definition, and whether Claude should handle directly.
+// If modelOverride is set, it bypasses config route lookup.
+func resolveModel(category, modelOverride string) (modelName string, def ModelDef, skip bool, err error) {
+	if modelOverride != "" {
+		d, ok := cfg.Models[modelOverride]
+		if !ok {
+			return "", ModelDef{}, false, fmt.Errorf("model override %q not found in config", modelOverride)
+		}
+		if !availableCLIs[d.Command] {
+			return modelOverride, d, true, nil
+		}
+		return modelOverride, d, false, nil
+	}
+
+	routeVal, ok := cfg.Routes[category]
+	if !ok {
+		return "", ModelDef{}, false, fmt.Errorf("category %q not found in config routes", category)
+	}
+	if routeVal == "claude" {
+		return "claude", ModelDef{}, true, nil
+	}
+
+	d, ok := cfg.Models[routeVal]
+	if !ok {
+		return "", ModelDef{}, false, fmt.Errorf("model %q (from route for category %q) not found in config models", routeVal, category)
+	}
+	if !availableCLIs[d.Command] {
+		return routeVal, d, true, nil
+	}
+	return routeVal, d, false, nil
+}
+
 type runOptions struct {
 	Prompt          string
 	CWD             string
-	Model           string
+	ModelDef        ModelDef
 	ReasoningEffort string
 	BypassApprovals bool
 	TimeoutMs       int
 }
 
-func defaultTimeout(provider string) int {
-	if provider == "gemini" {
+func defaultTimeout(command string) int {
+	if command == "gemini" {
 		return defaultGeminiTimeout
 	}
 	return defaultCodexTimeout
@@ -201,7 +312,6 @@ func getWorkspaceRoot() (string, error) {
 			return "", err
 		}
 	}
-
 	return filepath.Abs(root)
 }
 
@@ -228,33 +338,17 @@ func resolveCwd(workspaceRoot, cwd string) (string, error) {
 	return target, nil
 }
 
-// allowedModels is the canonical allowlist derived from skills/code-routing.md.
-// Update this list whenever the MCP Tool Mapping table in that file changes.
-var allowedModels = map[string]string{
-	"gpt-5.3-codex":   "codex",
-	"gpt-5.4":         "codex",
-	"gpt-5-nano":      "codex",
-	"gemini-2.5-pro":  "gemini",
-	"gemini-2.5-flash": "gemini",
-}
-
-func getProvider(model string) (string, error) {
-	provider, ok := allowedModels[model]
-	if !ok {
-		allowed := slices.Sorted(maps.Keys(allowedModels))
-		return "", fmt.Errorf("unsupported model %q. Allowed models: %s", model, strings.Join(allowed, ", "))
-	}
-	return provider, nil
-}
-
 // runGemini invokes the Gemini CLI. The --yolo flag enables YOLO approval mode,
 // which auto-approves tool calls (shell commands, file ops) while keeping the
-// sandbox active. If the installed CLI supports it, --approval-mode=yolo is the
-// equivalent explicit form.
+// sandbox active.
 func runGemini(ctx context.Context, opts runOptions) (cliResult, error) {
+	args := make([]string, len(opts.ModelDef.Args))
+	copy(args, opts.ModelDef.Args)
+	args = append(args, "-p", opts.Prompt, "--yolo")
+
 	return runCli(ctx, cliRequest{
-		Command:     "gemini",
-		Args:        []string{"-m", opts.Model, "-p", opts.Prompt, "--yolo"},
+		Command:     opts.ModelDef.Command,
+		Args:        args,
 		CWD:         opts.CWD,
 		TimeoutMs:   opts.TimeoutMs,
 		ErrorPrefix: "Gemini CLI",
@@ -272,17 +366,13 @@ func runCodex(ctx context.Context, opts runOptions) (cliResult, error) {
 	outputFile := f.Name()
 	defer os.Remove(outputFile)
 
-	args := []string{
-		"exec",
-		"-m",
-		opts.Model,
-		"-o",
-		outputFile,
-	}
+	args := make([]string, len(opts.ModelDef.Args))
+	copy(args, opts.ModelDef.Args)
+	args = append(args, "-o", outputFile)
+
 	if opts.BypassApprovals {
 		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
 	}
-
 	if strings.TrimSpace(opts.ReasoningEffort) != "" {
 		args = append(args, "--config", "model_reasoning_effort="+opts.ReasoningEffort)
 	}
@@ -292,7 +382,7 @@ func runCodex(ctx context.Context, opts runOptions) (cliResult, error) {
 	args = append(args, opts.Prompt)
 
 	result, err := runCli(ctx, cliRequest{
-		Command:     "codex",
+		Command:     opts.ModelDef.Command,
 		Args:        args,
 		CWD:         opts.CWD,
 		TimeoutMs:   opts.TimeoutMs,
@@ -381,4 +471,12 @@ func writeLog(entry logEntry) {
 		}
 		f.Write(append(data, '\n'))
 	}()
+}
+
+func mustJSON(v any) string {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return "{}"
+	}
+	return string(data)
 }

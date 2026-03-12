@@ -61,6 +61,47 @@ mkdir -p ~/.claude/skills/oh-my-bridge
 cp "${CLAUDE_PLUGIN_ROOT}/skills/code-routing.md" ~/.claude/skills/oh-my-bridge/SKILL.md
 ```
 
+3.5. **Generate config**
+
+```bash
+CONFIG_DIR="$HOME/.config/oh-my-bridge"
+CONFIG_FILE="$CONFIG_DIR/config.json"
+mkdir -p "$CONFIG_DIR"
+
+# Warn if existing config will be overwritten
+if [ -f "$CONFIG_FILE" ]; then
+  echo "⚠️  Existing config will be overwritten."
+  echo "    If you have custom settings, back up first:"
+  echo "    cp $CONFIG_FILE $CONFIG_FILE.bak"
+fi
+
+# Always write default config
+cat > "$CONFIG_FILE" << 'CONF'
+{
+  "routes": {
+    "visual-engineering": "gemini-3-pro",
+    "ultrabrain": "gpt-5.3-codex",
+    "deep": "gpt-5.3-codex",
+    "artistry": "gemini-3-pro",
+    "quick": "claude",
+    "writing": "gemini-3-flash",
+    "unspecified-high": "gpt-5.4",
+    "unspecified-low": "claude"
+  },
+  "models": {
+    "gpt-5.4":             {"command": "codex", "args": ["exec", "-m", "gpt-5.4"]},
+    "gpt-5.3-codex":       {"command": "codex", "args": ["exec", "-m", "gpt-5.3-codex"]},
+    "gpt-5.3-codex-spark": {"command": "codex", "args": ["exec", "-m", "gpt-5.3-codex-spark"]},
+    "gemini-3-pro":        {"command": "gemini", "args": ["-m", "gemini-3-pro"]},
+    "gemini-3-flash":      {"command": "gemini", "args": ["-m", "gemini-3-flash"]},
+    "gemini-2.5-pro":      {"command": "gemini", "args": ["-m", "gemini-2.5-pro"]},
+    "gemini-2.5-flash":    {"command": "gemini", "args": ["-m", "gemini-2.5-flash"]}
+  }
+}
+CONF
+echo "OK: config written to $CONFIG_FILE"
+```
+
 4. **Verify installation**
 
 ```bash
@@ -75,6 +116,9 @@ fi
 
 # Verify skill
 head -3 ~/.claude/skills/oh-my-bridge/SKILL.md
+
+# Verify config
+cat ~/.config/oh-my-bridge/config.json | jq .routes
 ```
 
 Expected output:
@@ -83,14 +127,20 @@ OK: binary exists and is executable at .../oh-my-bridge
 -rwxr-xr-x  ...  oh-my-bridge
 ---
 name: oh-my-bridge:code-routing
-description: ALWAYS invoke before any code change...
+description: ...
+{
+  "visual-engineering": "gemini-3-pro",
+  ...
+}
 ```
 
 5. **Report to user**
 
 Tell the user:
 - Skill installed to `~/.claude/skills/oh-my-bridge/SKILL.md`
-  - Model routing table (category → fallback chain → MCP params) is inlined in the skill
+- Config written to `~/.config/oh-my-bridge/config.json`
+  - Routes (category → model) and model definitions are in the config
+  - Edit the config to customize routing — `/oh-my-bridge:setup` resets it to defaults, so back up custom settings first
 - **Restart Claude Code** for the skill to take effect
 - After restart, Claude will automatically decide when to delegate and route to the best available model (Codex or Gemini) via the unified bridge MCP tool
 

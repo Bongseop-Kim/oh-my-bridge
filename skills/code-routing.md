@@ -1,6 +1,6 @@
 ---
 name: oh-my-bridge:code-routing
-description: "Multi-model router — classifies tasks and delegates to the best available model (Codex, Gemini, GPT-5.4, or Claude-native) via CLI without API keys. Invoke before any code change."
+description: "Multi-model router — classifies tasks and delegates to the best available model (Codex, Gemini, or Claude-native) via CLI without API keys. Invoke before any code change."
 ---
 
 # Multi-Model Code Routing
@@ -52,7 +52,7 @@ Do not follow the plan's implicit implementation assumptions — plans are writt
 
 ## Model Routing
 
-Before calling `mcp__bridge__delegate`, classify the task and select the appropriate model from the fallback chain below.
+Before calling `mcp__bridge__delegate`, classify the task and set the `category` field. The binary resolves the model from `~/.config/oh-my-bridge/config.json`.
 
 ### Category Classification
 
@@ -70,35 +70,6 @@ Pick the single best-matching category:
 | `unspecified-low` | Unclear category, low complexity or low impact |
 
 **When in doubt between `unspecified-high` and `unspecified-low`:** prefer `unspecified-high`.
-
-### Fallback Chain
-
-Work through the chain top to bottom. Stop at the first success.
-
-| Category | 1st | 2nd | 3rd |
-|----------|-----|-----|-----|
-| `visual-engineering` | Gemini Pro (high) | Claude (직접) | — |
-| `ultrabrain` | GPT-5.3 Codex (xhigh) | Gemini Pro (high) | Claude (직접) |
-| `deep` | GPT-5.3 Codex (medium) | Claude (직접) | Gemini Pro (high) |
-| `artistry` | Gemini Pro (high) | Claude (직접) | GPT-5.4 |
-| `quick` | Claude (직접) | Gemini Flash | GPT-5-Nano |
-| `writing` | Gemini Flash | Claude (직접) | — |
-| `unspecified-high` | GPT-5.4 (high) | Claude (직접) | — |
-| `unspecified-low` | Claude (직접) | GPT-5.3 Codex (medium) | Gemini Flash |
-
-### MCP Tool Mapping
-
-All external models are called via `mcp__bridge__delegate`.
-
-| Model | `model` param | `reasoning_effort` |
-|-------|---------------|--------------------|
-| GPT-5.3 Codex (xhigh) | `gpt-5.3-codex` | `high` |
-| GPT-5.3 Codex (medium) | `gpt-5.3-codex` | `medium` |
-| GPT-5.4 (high) | `gpt-5.4` | `high` |
-| GPT-5-Nano | `gpt-5-nano` | — |
-| Gemini Pro (high) | `gemini-2.5-pro` | — |
-| Gemini Flash | `gemini-2.5-flash` | — |
-| **Claude (직접)** | — | Edit/Write directly (no MCP) |
 
 ---
 
@@ -139,26 +110,25 @@ Exception: paste short type definitions inline when field-level accuracy is crit
 ```
 mcp__bridge__delegate({
   prompt: "<7-Section delegation prompt>",
-  model: "<model param from table above>",
+  category: "<category from classification above>",
   cwd: "<absolute project path>",
   reasoning_effort: "<effort if applicable, omit otherwise>",
-  category: "<category from classification above>",
-  is_fallback: false
+  model: "<optional model override — omit to use config routes>"
 })
 ```
 
 ## After delegation
 
 1. Use `Read` to verify generated files exist and look correct.
-2. Report a one-line summary from the response fields:
+2. Report a one-line summary:
 
-   **`{Model} · {latency_ms/1000}s · {status}`**
-
-   Example: `GPT-5.3 Codex · 23s · success`
+   - 정상 응답: **`{model} · {latency_ms/1000}s · success`** (예: `gpt-5.3-codex · 23s · success`)
+   - `action: claude` 응답: **`claude · direct`**
 
    Then report: file list + key decisions made.
 
-3. If MCP fails: move to the next model in the fallback chain with `is_fallback: true`. Do not retry the same model.
+3. If response `action` is `"claude"`: handle the task directly with Claude native Edit/Write.
+4. If MCP call fails: handle the task directly with Claude native Edit/Write. Do not retry.
 
 ## Security
 
