@@ -4,7 +4,8 @@ project_name: oh-my-bridge
 
 builds:
   - id: oh-my-bridge
-    main: ./mcp-servers/bridge
+    dir: mcp-servers/bridge
+    main: .
     binary: oh-my-bridge
     env:
       - CGO_ENABLED=0
@@ -32,13 +33,3 @@ checksum:
 changelog:
   use: git
 
-brews:
-  - name: oh-my-bridge
-    repository:
-      owner: Bongseop-Kim
-      name: homebrew-oh-my-bridge
-    homepage: https://github.com/Bongseop-Kim/oh-my-bridge
-    description: MCP bridge server for delegating oh-my-bridge tasks to Gemini and Codex CLIs.
-    license: MIT
-    install: |
-      bin.install "oh-my-bridge"
