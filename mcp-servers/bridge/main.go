@@ -41,7 +41,8 @@ type ModelDef struct {
 var (
 	cfg           Config
 	availableCLIs map[string]bool
-	mu            sync.Mutex
+	mu            sync.Mutex // protects cfg and availableCLIs
+	logMu         sync.Mutex // serializes writeLog writes
 
 	// ErrTimeout is returned by runCli when the context deadline is exceeded.
 	ErrTimeout = errors.New("cli timeout")
@@ -520,33 +521,33 @@ func runCli(parent context.Context, req cliRequest) (cliResult, error) {
 }
 
 func writeLog(entry logEntry) {
-	go func() {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "writeLog: UserHomeDir: %v\n", err)
-			return
-		}
-		logDir := filepath.Join(home, ".claude", "logs")
-		if err := os.MkdirAll(logDir, 0755); err != nil {
-			fmt.Fprintf(os.Stderr, "writeLog: MkdirAll: %v\n", err)
-			return
-		}
-		logPath := filepath.Join(logDir, "oh-my-bridge.log")
-		f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "writeLog: OpenFile: %v\n", err)
-			return
-		}
-		defer f.Close()
-		data, err := json.Marshal(entry)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "writeLog: json.Marshal: %v\n", err)
-			return
-		}
-		if _, err := f.Write(append(data, '\n')); err != nil {
-			fmt.Fprintf(os.Stderr, "writeLog: Write: %v\n", err)
-		}
-	}()
+	logMu.Lock()
+	defer logMu.Unlock()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "writeLog: UserHomeDir: %v\n", err)
+		return
+	}
+	logDir := filepath.Join(home, ".claude", "logs")
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "writeLog: MkdirAll: %v\n", err)
+		return
+	}
+	logPath := filepath.Join(logDir, "oh-my-bridge.log")
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "writeLog: OpenFile: %v\n", err)
+		return
+	}
+	defer f.Close()
+	data, err := json.Marshal(entry)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "writeLog: json.Marshal: %v\n", err)
+		return
+	}
+	if _, err := f.Write(append(data, '\n')); err != nil {
+		fmt.Fprintf(os.Stderr, "writeLog: Write: %v\n", err)
+	}
 }
 
 func toJSONOrEmpty(v any) string {
