@@ -12,7 +12,7 @@ Claude가 코드 생성 작업을 자율 판단하여 적합한 AI 모델(Codex/
 | **개발자** | 소스 코드 수정, 기능 추가, 버그 수정 | `/Users/duegosystem/git/oh-my-bridge/` |
 
 **규칙:**
-- MCP 연결 실패 → **사용자 관점** → 캐시 경로에서 바이너리 빌드
+- MCP 연결 실패 → **사용자 관점** → 캐시 경로에서 `/oh-my-bridge:setup` 재실행
 - 소스 변경 후 배포 → **개발자 관점** → repo에서 빌드 후 `bump-version + /plugin update`
 - 절대로 사용자 문제를 개발자 repo 빌드로 해결하지 말 것
 
@@ -35,10 +35,9 @@ gemini --version
 /oh-my-bridge:uninstall
 
 # 재배포 순서
-# 1. ./bump-version.sh <new-version>  # 3개 파일 한 번에 업데이트
-# 2. git commit
-# 3. Claude Code에서: /plugin update oh-my-bridge
-# 4. Claude Code 재시작
+# 1. ./bump-version.sh <new-version>  # 버전 업데이트 + commit + tag + push (GitHub Actions 자동 트리거)
+# 2. (2분 대기) Claude Code에서: /plugin update oh-my-bridge
+# 3. Claude Code 재시작
 
 # 캐시 직접 동기화 (버전 업 전 급할 때, 현재 버전: 2.2.0)
 cp skills/code-routing.md ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/2.2.0/skills/code-routing.md
