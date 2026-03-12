@@ -19,8 +19,8 @@
 
 ## 현재 Fallback Chain (2026-03-11)
 
-| 카테고리 | 1순위 | 2순위 | 3순위 | 4순위 |
-|---------|------|------|------|------|
+| 카테고리 | 1순위 | 2순위 | 3순위 |
+|---------|------|------|------|
 | `visual-engineering` | Gemini Pro (high) | Claude (직접) | — |
 | `ultrabrain` | GPT-5.3 Codex (xhigh) | Gemini Pro (high) | Claude (직접) |
 | `deep` | GPT-5.3 Codex (medium) | Claude (직접) | Gemini Pro (high) |

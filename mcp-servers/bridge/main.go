@@ -29,6 +29,7 @@ type delegateInput struct {
 	CWD             string `json:"cwd,omitempty" jsonschema:"Optional working directory, constrained to the configured workspace root."`
 	TimeoutMs       int    `json:"timeoutMs,omitempty" jsonschema:"Optional timeout in milliseconds. Maximum 300000."`
 	ReasoningEffort string `json:"reasoning_effort,omitempty" jsonschema:"Optional reasoning effort passed through to Codex."`
+	BypassApprovals bool   `json:"bypassApprovals,omitempty" jsonschema:"If true, passes --dangerously-bypass-approvals-and-sandbox to Codex. Use only in trusted, sandboxed contexts."`
 }
 
 type delegateOutput struct {
@@ -108,6 +109,7 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 			CWD:             resolvedCwd,
 			Model:           input.Model,
 			ReasoningEffort: input.ReasoningEffort,
+			BypassApprovals: input.BypassApprovals,
 			TimeoutMs:       timeoutMs,
 		})
 	default:
@@ -136,6 +138,7 @@ type runOptions struct {
 	CWD             string
 	Model           string
 	ReasoningEffort string
+	BypassApprovals bool
 	TimeoutMs       int
 }
 
@@ -179,13 +182,18 @@ func getProvider(model string) (string, error) {
 	switch {
 	case strings.HasPrefix(model, "gemini-"):
 		return "gemini", nil
-	case strings.HasPrefix(model, "gpt-"), strings.HasPrefix(model, "codex-"), strings.HasPrefix(model, "o"):
+	case strings.HasPrefix(model, "gpt-"), strings.HasPrefix(model, "codex-"),
+		len(model) >= 2 && model[0] == 'o' && model[1] >= '0' && model[1] <= '9':
 		return "codex", nil
 	default:
-		return "", errors.New("unsupported model prefix. Use gemini-* or gpt-*/codex-*/o* models.")
+		return "", errors.New("unsupported model prefix. Use gemini-* or gpt-*/codex-*/o1/o3/o4-* models.")
 	}
 }
 
+// runGemini invokes the Gemini CLI. The --yolo flag enables YOLO approval mode,
+// which auto-approves tool calls (shell commands, file ops) while keeping the
+// sandbox active. If the installed CLI supports it, --approval-mode=yolo is the
+// equivalent explicit form.
 func runGemini(ctx context.Context, opts runOptions) (cliResult, error) {
 	return runCli(ctx, cliRequest{
 		Command:     "gemini",
@@ -209,9 +217,11 @@ func runCodex(ctx context.Context, opts runOptions) (cliResult, error) {
 		"exec",
 		"-m",
 		opts.Model,
-		"--dangerously-bypass-approvals-and-sandbox",
 		"-o",
 		outputFile,
+	}
+	if opts.BypassApprovals {
+		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
 	}
 
 	if strings.TrimSpace(opts.ReasoningEffort) != "" {

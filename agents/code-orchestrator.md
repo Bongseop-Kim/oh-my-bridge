@@ -108,3 +108,4 @@ If an MCP call fails:
 - Never pass secrets, API keys, or credentials in the prompt
 - `cwd` must always point to the project directory, never `/`, `~`, or system paths
 - Do not execute with network-sensitive prompts in public repositories
+- **`bypassApprovals` is dangerous**: passing `bypassApprovals: true` to `mcp__bridge__delegate` causes Codex to run with `--dangerously-bypass-approvals-and-sandbox`, which disables all shell-command approval prompts and sandbox restrictions. Only set this when the working directory is an isolated, trusted workspace (e.g., a CI sandbox or a git worktree created specifically for the task). Never set it when `cwd` is a shared or production directory.
