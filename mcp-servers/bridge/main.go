@@ -134,6 +134,11 @@ func main() {
 		Description: "Delegate a code generation task to the best available AI model.",
 	}, delegateTool)
 
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "status",
+		Description: "Return current config routes, model definitions, and CLI availability.",
+	}, statusTool)
+
 	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
 		log.Fatal(err)
 	}
@@ -256,6 +261,34 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 			&mcp.TextContent{Text: result.Text},
 		},
 	}, output, nil
+}
+
+type statusInput struct{}
+
+type statusOutput struct {
+	Routes     map[string]string     `json:"routes"`
+	Models     map[string]ModelDef   `json:"models"`
+	CLIStatus  map[string]bool       `json:"cli_status"`
+	ConfigPath string                `json:"config_path"`
+}
+
+func statusTool(ctx context.Context, _ *mcp.CallToolRequest, _ statusInput) (*mcp.CallToolResult, statusOutput, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, statusOutput{}, fmt.Errorf("cannot determine home directory: %w", err)
+	}
+	configPath := filepath.Join(home, ".config", "oh-my-bridge", "config.json")
+	out := statusOutput{
+		Routes:     cfg.Routes,
+		Models:     cfg.Models,
+		CLIStatus:  availableCLIs,
+		ConfigPath: configPath,
+	}
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{Text: toJSONOrEmpty(out)},
+		},
+	}, out, nil
 }
 
 // resolveModel returns the model name, its definition, and whether Claude should handle directly.
