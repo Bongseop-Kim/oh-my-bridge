@@ -1,6 +1,20 @@
 # oh-my-bridge — CLAUDE.md
 
-Claude가 코드 생성 작업을 자율 판단하여 적합한 AI 모델(Codex/Gemini)에 위임하는 skill 기반 브리지 플러그인 (v2.1.0).
+Claude가 코드 생성 작업을 자율 판단하여 적합한 AI 모델(Codex/Gemini)에 위임하는 skill 기반 브리지 플러그인 (v2.2.0).
+
+## 작업 관점 기준 (CRITICAL)
+
+이 repo의 작업은 두 관점이 공존한다. **문제를 받았을 때 반드시 먼저 관점을 판단하라.**
+
+| 관점 | 언제 | 경로 기준 |
+|------|------|----------|
+| **사용자** | MCP 연결 실패, 플러그인 동작 문제, 설치 후 에러 | `~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/<version>/` |
+| **개발자** | 소스 코드 수정, 기능 추가, 버그 수정 | `/Users/duegosystem/git/oh-my-bridge/` |
+
+**규칙:**
+- MCP 연결 실패 → **사용자 관점** → 캐시 경로에서 바이너리 빌드
+- 소스 변경 후 배포 → **개발자 관점** → repo에서 빌드 후 `bump-version + /plugin update`
+- 절대로 사용자 문제를 개발자 repo 빌드로 해결하지 말 것
 
 ## 전제조건
 
@@ -26,9 +40,8 @@ gemini --version
 # 3. Claude Code에서: /plugin update oh-my-bridge
 # 4. Claude Code 재시작
 
-# 캐시 직접 동기화 (버전 업 전 급할 때, 현재 버전: 2.1.0)
-cp skills/code-routing.md ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/2.1.0/skills/code-routing.md
-cp skills/model-routing.md ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/2.1.0/skills/model-routing.md
+# 캐시 직접 동기화 (버전 업 전 급할 때, 현재 버전: 2.2.0)
+cp skills/code-routing.md ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/2.2.0/skills/code-routing.md
 
 # 사용 로그
 tail -5 ~/.claude/logs/codex-usage.log | jq .

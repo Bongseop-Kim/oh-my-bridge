@@ -47,11 +47,61 @@ Do not follow the plan's implicit implementation assumptions — plans are writt
 
 ---
 
+## Model Routing
+
+Before calling `mcp__bridge__delegate`, classify the task and select the appropriate model from the fallback chain below.
+
+### Category Classification
+
+Pick the single best-matching category:
+
+| Category | When to use |
+|----------|------------|
+| `visual-engineering` | UI components, CSS, SVG, layout, animation, design systems |
+| `ultrabrain` | Algorithm design, complex architecture, mathematical optimization, deep reasoning |
+| `deep` | Refactoring, multi-file logic changes, complex business logic |
+| `artistry` | Creative patterns, expressive code style, novel design approaches |
+| `quick` | Boilerplate, simple functions, stubs, scaffolding |
+| `writing` | Documentation, comments, README, changelogs |
+| `unspecified-high` | Unclear category, but high complexity or high impact |
+| `unspecified-low` | Unclear category, low complexity or low impact |
+
+**When in doubt between `unspecified-high` and `unspecified-low`:** prefer `unspecified-high`.
+
+### Fallback Chain
+
+Work through the chain top to bottom. Stop at the first success.
+
+| Category | 1st | 2nd | 3rd |
+|----------|-----|-----|-----|
+| `visual-engineering` | Gemini Pro (high) | Claude (직접) | — |
+| `ultrabrain` | GPT-5.3 Codex (xhigh) | Gemini Pro (high) | Claude (직접) |
+| `deep` | GPT-5.3 Codex (medium) | Claude (직접) | Gemini Pro (high) |
+| `artistry` | Gemini Pro (high) | Claude (직접) | GPT-5.4 |
+| `quick` | Claude (직접) | Gemini Flash | GPT-5-Nano |
+| `writing` | Gemini Flash | Claude (직접) | — |
+| `unspecified-high` | GPT-5.4 (high) | Claude (직접) | — |
+| `unspecified-low` | Claude (직접) | GPT-5.3 Codex (medium) | Gemini Flash |
+
+### MCP Tool Mapping
+
+All external models are called via `mcp__bridge__delegate`.
+
+| Model | `model` param | `reasoning_effort` |
+|-------|---------------|--------------------|
+| GPT-5.3 Codex (xhigh) | `gpt-5.3-codex` | `high` |
+| GPT-5.3 Codex (medium) | `gpt-5.3-codex` | `medium` |
+| GPT-5.4 (high) | `gpt-5.4` | `high` |
+| GPT-5-Nano | `gpt-5-nano` | — |
+| Gemini Pro (high) | `gemini-2.5-pro` | — |
+| Gemini Flash | `gemini-2.5-flash` | — |
+| **Claude (직접)** | — | Edit/Write directly (no MCP) |
+
+---
+
 ## How to delegate
 
-**Before calling any MCP tool, invoke `oh-my-bridge:model-routing` to classify the task category and select the appropriate model.** Do not default to Codex — the model is determined by the routing skill.
-
-Use the 7-Section format and call the MCP tool returned by `oh-my-bridge:model-routing`:
+Use the 7-Section format:
 
 ```
 1. TASK: [One atomic, specific goal sentence]
@@ -86,7 +136,7 @@ Exception: paste short type definitions inline when field-level accuracy is crit
 ```
 mcp__bridge__delegate({
   prompt: "<7-Section delegation prompt>",
-  model: "<model from oh-my-bridge:model-routing>",
+  model: "<model param from table above>",
   cwd: "<absolute project path>",
   reasoning_effort: "<effort if applicable, omit otherwise>"
 })
@@ -95,8 +145,15 @@ mcp__bridge__delegate({
 ## After delegation
 
 1. Use `Read` to verify generated files exist and look correct.
-2. Report to the user: file list + key decisions made.
-3. If MCP fails: follow the fallback chain in `oh-my-bridge:model-routing`. Do not retry the same model.
+2. Report to the user: file list + key decisions made + model used + fallback path (if any).
+
+```yaml
+category: deep
+model used: GPT-5.3 Codex (medium)
+fallback: none
+```
+
+3. If MCP fails: move to the next model in the fallback chain. Do not retry the same model.
 
 ## Security
 

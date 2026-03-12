@@ -1,6 +1,6 @@
 {
   "name": "oh-my-bridge",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Claude Code + Codex/Gemini CLI 외부 모델 통합 브리지",
   "keywords": [
     "codex",
