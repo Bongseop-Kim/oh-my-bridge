@@ -169,9 +169,9 @@ cat > "$CONFIG_FILE" << 'CONF'
     "unspecified-low": "claude"
   },
   "models": {
-    "gpt-5.4":             {"command": "codex", "args": ["exec", "-m", "gpt-5.4"]},
-    "gpt-5.3-codex":       {"command": "codex", "args": ["exec", "-m", "gpt-5.3-codex"]},
-    "gpt-5.3-codex-spark": {"command": "codex", "args": ["exec", "-m", "gpt-5.3-codex-spark"]},
+    "gpt-5.4":             {"command": "codex", "args": ["exec", "--full-auto", "-m", "gpt-5.4"]},
+    "gpt-5.3-codex":       {"command": "codex", "args": ["exec", "--full-auto", "-m", "gpt-5.3-codex"]},
+    "gpt-5.3-codex-spark": {"command": "codex", "args": ["exec", "--full-auto", "-m", "gpt-5.3-codex-spark"]},
     "gemini-3-pro":        {"command": "gemini", "args": ["-m", "gemini-3-pro"]},
     "gemini-3-flash":      {"command": "gemini", "args": ["-m", "gemini-3-flash"]},
     "gemini-2.5-pro":      {"command": "gemini", "args": ["-m", "gemini-2.5-pro"]},
