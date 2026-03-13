@@ -23,13 +23,28 @@ if [ -x "$BINARY" ]; then
   INSTALLED_VERSION=$("$BINARY" --version 2>/dev/null || echo "")
 fi
 
+# If binary not at current version path, check older cached versions
+PREV_VERSION=""
+if [ -z "$INSTALLED_VERSION" ]; then
+  CACHE_BASE=$(dirname "${CLAUDE_PLUGIN_ROOT}")
+  for old_bin in "$CACHE_BASE"/*/mcp-servers/bridge/oh-my-bridge; do
+    if [ -x "$old_bin" ]; then
+      v=$("$old_bin" --version 2>/dev/null || echo "")
+      if [ -n "$v" ] && [ "$v" != "$VERSION" ]; then
+        PREV_VERSION="$v"
+      fi
+    fi
+  done
+fi
+
 if [ "$INSTALLED_VERSION" = "$VERSION" ]; then
   echo "OK: binary already up to date (v${VERSION})"
 else
-  if [ -n "$INSTALLED_VERSION" ]; then
-    echo "Updating oh-my-bridge v${INSTALLED_VERSION} → v${VERSION}..."
+  if [ -n "$INSTALLED_VERSION" ] || [ -n "$PREV_VERSION" ]; then
+    FROM_VER="${INSTALLED_VERSION:-$PREV_VERSION}"
+    echo "Updating oh-my-bridge v${FROM_VER} → v${VERSION}..."
   else
-    echo "Downloading oh-my-bridge v${VERSION} for ${OS}/${ARCH}..."
+    echo "Installing oh-my-bridge v${VERSION} for ${OS}/${ARCH}..."
   fi
   TMPDIR=$(mktemp -d)
   if curl -fsSL "$URL" | tar -xz -C "$TMPDIR"; then
@@ -50,7 +65,25 @@ else
 fi
 ```
 
-2. **Register MCP server with absolute path in global config**
+2. **Clean up old cached versions**
+
+```bash
+CACHE_BASE=$(dirname "${CLAUDE_PLUGIN_ROOT}")
+REMOVED=0
+for old_dir in "$CACHE_BASE"/*/; do
+  old_ver=$(basename "$old_dir")
+  if [ "$old_ver" != "$VERSION" ] && [ -d "$old_dir" ]; then
+    rm -rf "$old_dir"
+    echo "OK: removed old version v${old_ver}"
+    REMOVED=$((REMOVED + 1))
+  fi
+done
+if [ "$REMOVED" -eq 0 ]; then
+  echo "OK: no old versions to clean up"
+fi
+```
+
+3. **Register MCP server with absolute path in global config**
 
 Write the bridge MCP server entry to `~/.claude.json` using the absolute cache path, so the binary is found regardless of which project directory Claude Code is opened in.
 
@@ -66,14 +99,14 @@ fi
 echo "OK: ~/.claude.json updated with absolute path"
 ```
 
-3. **Install skills**
+4. **Install skills**
 
 ```bash
 mkdir -p ~/.claude/skills/oh-my-bridge
 cp "${CLAUDE_PLUGIN_ROOT}/skills/code-routing.md" ~/.claude/skills/oh-my-bridge/SKILL.md
 ```
 
-4. **Install shell alias**
+5. **Install shell alias**
 
 ```bash
 SHELL_RC=""
@@ -108,7 +141,7 @@ else
 fi
 ```
 
-5. **Generate config**
+6. **Generate config**
 
 ```bash
 CONFIG_DIR="$HOME/.config/oh-my-bridge"
@@ -149,7 +182,7 @@ CONF
 echo "OK: config written to $CONFIG_FILE"
 ```
 
-6. **Verify installation**
+7. **Verify installation**
 
 ```bash
 # Verify Go binary
@@ -181,7 +214,7 @@ description: ...
 }
 ```
 
-7. **Report to user**
+8. **Report to user**
 
 Tell the user:
 - Skill installed to `~/.claude/skills/oh-my-bridge/SKILL.md`
