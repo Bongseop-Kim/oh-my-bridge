@@ -423,6 +423,7 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 type statusInput struct{}
 
 type statusOutput struct {
+	Version    string                `json:"version"`
 	Routes     map[string]string     `json:"routes"`
 	Models     map[string]ModelDef   `json:"models"`
 	CLIStatus  map[string]bool       `json:"cli_status"`
@@ -441,6 +442,7 @@ func statusTool(ctx context.Context, _ *mcp.CallToolRequest, _ statusInput) (*mc
 	configPath := filepath.Join(home, ".config", "oh-my-bridge", "config.json")
 	c, clis := getState()
 	out := statusOutput{
+		Version:    serverVersion,
 		Routes:     c.Routes,
 		Models:     c.Models,
 		CLIStatus:  clis,
