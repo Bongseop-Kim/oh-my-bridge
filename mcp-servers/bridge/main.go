@@ -83,6 +83,15 @@ var (
 	ErrUnsupportedCommand = errors.New("unsupported command")
 )
 
+// Reason constants for delegateOutput.Reason and logEntry.Reason.
+const (
+	reasonRouteConfigured  = "route_configured"
+	reasonCLINotInstalled  = "cli_not_installed"
+	reasonCLIErrorTimeout  = "cli_error_timeout"
+	reasonCLIErrorRateLimit = "cli_error_rate_limit"
+	reasonCLIErrorCrash    = "cli_error_crash"
+)
+
 type delegateInput struct {
 	Prompt               string `json:"prompt" jsonschema:"Task prompt to send to the selected model."`
 	Category             string `json:"category" jsonschema:"Task category (required): visual-engineering, ultrabrain, deep, artistry, quick, writing, unspecified-high, unspecified-low"`
@@ -433,7 +442,8 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 			return nil, delegateOutput{}, err
 		}
 		timedOut := errors.Is(err, ErrTimeout)
-		errReason := classifyCliError(err, err.Error())
+		errMsg := err.Error()
+		errReason := classifyCliError(err)
 		writeLog(logEntry{
 			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 			Model:     modelName,
@@ -442,7 +452,7 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 			LatencyMs: time.Since(start).Milliseconds(),
 			TimedOut:  timedOut,
 			Status:    "cli_error",
-			Error:     err.Error(),
+			Error:     errMsg,
 			Reason:    errReason,
 		})
 		out := delegateOutput{
@@ -450,7 +460,8 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 			Category: input.Category,
 			Model:    modelName,
 			Provider: modelDef.Command,
-			Reason:   fmt.Sprintf("%s: %s", errReason, err.Error()),
+			TimedOut: timedOut,
+			Reason:   fmt.Sprintf("%s: %s", errReason, errMsg),
 		}
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{&mcp.TextContent{Text: toJSONOrEmpty(out)}},
@@ -532,7 +543,7 @@ func resolveModel(category, modelOverride string, c Config, clis map[string]bool
 			return "", ModelDef{}, false, "", fmt.Errorf("model override %q not found in config", modelOverride)
 		}
 		if !clis[d.Command] {
-			return modelOverride, d, true, "cli_not_installed", nil
+			return modelOverride, d, true, reasonCLINotInstalled, nil
 		}
 		return modelOverride, d, false, "", nil
 	}
@@ -546,7 +557,7 @@ func resolveModel(category, modelOverride string, c Config, clis map[string]bool
 		}
 	}
 	if routeVal == "claude" {
-		return "claude", ModelDef{}, true, "route_configured", nil
+		return "claude", ModelDef{}, true, reasonRouteConfigured, nil
 	}
 
 	d, ok := c.Models[routeVal]
@@ -554,22 +565,22 @@ func resolveModel(category, modelOverride string, c Config, clis map[string]bool
 		return "", ModelDef{}, false, "", fmt.Errorf("model %q (from route for category %q) not found in config models", routeVal, category)
 	}
 	if !clis[d.Command] {
-		return routeVal, d, true, "cli_not_installed", nil
+		return routeVal, d, true, reasonCLINotInstalled, nil
 	}
 	return routeVal, d, false, "", nil
 }
 
-func classifyCliError(err error, errMsg string) string {
+func classifyCliError(err error) string {
 	if errors.Is(err, ErrTimeout) {
-		return "cli_error_timeout"
+		return reasonCLIErrorTimeout
 	}
-	lower := strings.ToLower(errMsg)
+	lower := strings.ToLower(err.Error())
 	if strings.Contains(lower, "rate limit") ||
 		strings.Contains(lower, "429") ||
 		strings.Contains(lower, "too many requests") {
-		return "cli_error_rate_limit"
+		return reasonCLIErrorRateLimit
 	}
-	return "cli_error_crash"
+	return reasonCLIErrorCrash
 }
 
 type runOptions struct {

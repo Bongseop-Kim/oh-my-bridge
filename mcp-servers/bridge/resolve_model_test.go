@@ -19,8 +19,8 @@ func TestResolveModel_ModelOverride_CLINotInstalled(t *testing.T) {
 	if !skip {
 		t.Error("expected skip=true")
 	}
-	if reason != "cli_not_installed" {
-		t.Errorf("expected reason=cli_not_installed, got %q", reason)
+	if reason != reasonCLINotInstalled {
+		t.Errorf("expected reason=%q, got %q", reasonCLINotInstalled, reason)
 	}
 }
 
@@ -56,8 +56,8 @@ func TestResolveModel_RouteConfigured_Claude(t *testing.T) {
 	if !skip {
 		t.Error("expected skip=true")
 	}
-	if reason != "route_configured" {
-		t.Errorf("expected reason=route_configured, got %q", reason)
+	if reason != reasonRouteConfigured {
+		t.Errorf("expected reason=%q, got %q", reasonRouteConfigured, reason)
 	}
 }
 
@@ -76,8 +76,8 @@ func TestResolveModel_RouteConfigured_CLINotInstalled(t *testing.T) {
 	if !skip {
 		t.Error("expected skip=true")
 	}
-	if reason != "cli_not_installed" {
-		t.Errorf("expected reason=cli_not_installed, got %q", reason)
+	if reason != reasonCLINotInstalled {
+		t.Errorf("expected reason=%q, got %q", reasonCLINotInstalled, reason)
 	}
 }
 
@@ -95,8 +95,8 @@ func TestResolveModel_DefaultRoute_Used(t *testing.T) {
 	if !skip {
 		t.Error("expected skip=true")
 	}
-	if reason != "route_configured" {
-		t.Errorf("expected reason=route_configured, got %q", reason)
+	if reason != reasonRouteConfigured {
+		t.Errorf("expected reason=%q, got %q", reasonRouteConfigured, reason)
 	}
 }
 
@@ -114,8 +114,8 @@ func TestResolveModel_DefaultRoute_NotUsed_WhenRouteExists(t *testing.T) {
 	if !skip {
 		t.Error("expected skip=true")
 	}
-	if reason != "route_configured" {
-		t.Errorf("expected reason=route_configured, got %q", reason)
+	if reason != reasonRouteConfigured {
+		t.Errorf("expected reason=%q, got %q", reasonRouteConfigured, reason)
 	}
 }
 

@@ -21,17 +21,23 @@ func makeSlowScript(t *testing.T, seconds int) string {
 	return scriptPath
 }
 
+// makeNamedExitScript creates a shell script with the given name that exits
+// immediately with exitCode. Returns the full path to the script.
+func makeNamedExitScript(t *testing.T, name string, exitCode int) string {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, name)
+	content := "#!/bin/sh\nexit " + strconv.Itoa(exitCode) + "\n"
+	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil {
+		t.Fatalf("makeNamedExitScript: %v", err)
+	}
+	return scriptPath
+}
+
 // makeFastExitScript creates a shell script that exits immediately with exitCode.
 // Useful for testing non-hang failure modes (immediate CLI error return).
 func makeFastExitScript(t *testing.T, exitCode int) string {
-	t.Helper()
-	dir := t.TempDir()
-	scriptPath := filepath.Join(dir, "fake-cli")
-	content := "#!/bin/sh\nexit " + strconv.Itoa(exitCode) + "\n"
-	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil {
-		t.Fatalf("makeFastExitScript: %v", err)
-	}
-	return scriptPath
+	return makeNamedExitScript(t, "fake-cli", exitCode)
 }
 
 // makeIncrementalOutputScript creates a script that emits `chunks` lines at
