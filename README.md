@@ -9,6 +9,8 @@ Claude Code에서 작업을 분류하고, 적합한 모델에 위임하는 브�
 [![GitHub Release](https://img.shields.io/github/v/release/Bongseop-Kim/oh-my-bridge?color=369eff&labelColor=black&logo=github&style=flat-square)](https://github.com/Bongseop-Kim/oh-my-bridge/releases)
 [![License](https://img.shields.io/badge/license-MIT-white?labelColor=black&style=flat-square)](./LICENSE)
 
+![oh-my-bridge — Claude가 지휘하고, 최적의 모델이 생성한다](docs/hero.png)
+
 </div>
 
 ---
@@ -195,6 +197,8 @@ oh-my-bridge config validate
 | Diff | `Esc` | 취소 |
 
 각 카테고리 옆에 **CLI 상태** (`● codex ✔` / `✗ codex 없음` / `─ built-in`)가 표시되어 설치 여부를 즉시 확인할 수 있다. 저장은 atomic write(`.tmp` → rename)로 처리된다.
+
+![oh-my-bridge config TUI](docs/config.png)
 
 ---
 
