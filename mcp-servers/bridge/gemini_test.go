@@ -3,6 +3,10 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -132,4 +136,67 @@ func TestRunGemini_FastExit(t *testing.T) {
 		t.Error("expected error from non-zero exit, got nil")
 	}
 	t.Logf("Gemini fast-exit returned error immediately: %v", err)
+}
+
+// makeArgsEchoScript creates a shell script that echoes all its arguments to stdout.
+func makeArgsEchoScript(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "args-echo-cli")
+	// Echo all args as JSON-like response so parseGeminiJSON passes through
+	content := fmt.Sprintf("#!/bin/sh\necho '{\"response\": \"'\"$*\"'\"}'\n")
+	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil {
+		t.Fatalf("makeArgsEchoScript: %v", err)
+	}
+	return scriptPath
+}
+
+// TestRunGemini_ArgsContainApprovalMode verifies that runGemini passes
+// --approval-mode=yolo and --output-format json to the CLI.
+func TestRunGemini_ArgsContainApprovalMode(t *testing.T) {
+	fakeBin := makeArgsEchoScript(t)
+
+	result, err := runGemini(context.Background(), runOptions{
+		Prompt: "test prompt",
+		CWD:    t.TempDir(),
+		ModelDef: ModelDef{
+			Command: fakeBin,
+			Args:    []string{},
+		},
+		Timeout: timeoutConfig{
+			MaxTimeoutMs:         5000,
+			FirstOutputTimeoutMs: 3000,
+			StabilityTimeoutMs:   2000,
+		},
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// The script echoes all args; the raw output before parseGeminiJSON would contain the flags.
+	// Since the script wraps args in JSON, check that the response contains the flags.
+	if !strings.Contains(result.Text, "--approval-mode=yolo") {
+		t.Errorf("expected --approval-mode=yolo in args, got: %q", result.Text)
+	}
+	if !strings.Contains(result.Text, "--output-format") {
+		t.Errorf("expected --output-format in args, got: %q", result.Text)
+	}
+}
+
+// TestParseGeminiJSON_Valid verifies that parseGeminiJSON extracts the response field.
+func TestParseGeminiJSON_Valid(t *testing.T) {
+	raw := `{"session_id":"abc","response":"hello world","stats":{}}`
+	got := parseGeminiJSON(raw)
+	if got != "hello world" {
+		t.Errorf("expected 'hello world', got %q", got)
+	}
+}
+
+// TestParseGeminiJSON_Invalid verifies that parseGeminiJSON falls back to raw text on parse failure.
+func TestParseGeminiJSON_Invalid(t *testing.T) {
+	raw := "not valid json"
+	got := parseGeminiJSON(raw)
+	if got != raw {
+		t.Errorf("expected raw fallback %q, got %q", raw, got)
+	}
 }

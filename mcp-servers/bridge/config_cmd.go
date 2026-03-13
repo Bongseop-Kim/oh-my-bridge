@@ -67,6 +67,7 @@ func cliStatusString(s cliStatusInfo) string {
 type validationError struct {
 	Rule    string
 	Message string
+	Warn    bool // true = warning only, not a hard error
 }
 
 // validateConfigRules는 config의 유효성을 검사하고 에러 목록을 반환한다.
@@ -91,6 +92,23 @@ func validateConfigRules(c Config) []validationError {
 			errs = append(errs, validationError{
 				Rule:    "route → model 존재",
 				Message: fmt.Sprintf("%s → %s (models에 없음)", cat, model),
+			})
+		}
+	}
+
+	validEfforts := map[string]bool{"low": true, "medium": true, "high": true}
+	for cat, co := range c.CategoryOverrides {
+		if co.ReasoningEffort != "" && !validEfforts[co.ReasoningEffort] {
+			errs = append(errs, validationError{
+				Rule:    "category_overrides reasoning_effort 값",
+				Message: fmt.Sprintf("category_overrides[%s].reasoning_effort=%q: low/medium/high 중 하나여야 합니다", cat, co.ReasoningEffort),
+			})
+		}
+		if _, ok := c.Routes[cat]; !ok {
+			errs = append(errs, validationError{
+				Rule:    "category_overrides → route 존재",
+				Message: fmt.Sprintf("category_overrides[%s]: routes에 없는 카테고리 (override가 무시됩니다)", cat),
+				Warn:    true,
 			})
 		}
 	}
@@ -122,12 +140,25 @@ func printConfigTable() {
 
 	ordered := orderedCategories(cfg.Routes)
 
-	fmt.Printf("%-22s %-20s %s\n", "Category", "Model", "CLI")
-	fmt.Printf("%-22s %-20s %s\n", "──────────────────────", "────────────────────", "───────────")
+	fmt.Printf("%-22s %-20s %-14s %s\n", "Category", "Model", "CLI", "Overrides")
+	fmt.Printf("%-22s %-20s %-14s %s\n", "──────────────────────", "────────────────────", "──────────────", "─────────────────────")
 	for _, cat := range ordered {
 		model := cfg.Routes[cat]
 		status := cliStatusFor(model, cfg.Models, availableCLIs)
-		fmt.Printf("%-22s %-20s %s\n", cat, model, cliStatusString(status))
+		override := ""
+		if cfg.CategoryOverrides != nil {
+			if co, ok := cfg.CategoryOverrides[cat]; ok {
+				parts := []string{}
+				if co.ReasoningEffort != "" {
+					parts = append(parts, "effort="+co.ReasoningEffort)
+				}
+				if co.PromptAppend != "" {
+					parts = append(parts, "prompt_append")
+				}
+				override = strings.Join(parts, " ")
+			}
+		}
+		fmt.Printf("%-22s %-20s %-14s %s\n", cat, model, cliStatusString(status), override)
 	}
 }
 
@@ -185,7 +216,14 @@ func runChecksCmd() tea.Cmd {
 		if cfg.Routes != nil && cfg.Models != nil {
 			errs := validateConfigRules(cfg)
 			for _, e := range errs {
-				if e.Rule == "route → model 존재" {
+				if e.Warn {
+					checks = append(checks, checkResult{
+						label: e.Rule,
+						pass:  false,
+						warn:  true,
+						msg:   e.Message,
+					})
+				} else {
 					checks = append(checks, checkResult{
 						label: e.Rule,
 						pass:  false,

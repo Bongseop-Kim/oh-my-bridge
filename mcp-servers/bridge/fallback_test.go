@@ -92,6 +92,126 @@ func TestDelegateTool_CLIError_ReturnsClaude(t *testing.T) {
 	}
 }
 
+// makeArgsCaptureFakeCodex creates a fake "codex" script that writes all args to a file,
+// then returns the args file path for inspection.
+func makeArgsCaptureFakeCodex(t *testing.T, argsFile string) {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "codex")
+	content := fmt.Sprintf("#!/bin/sh\necho \"$*\" > %s\necho done\n", argsFile)
+	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil {
+		t.Fatalf("makeArgsCaptureFakeCodex: %v", err)
+	}
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+origPath)
+}
+
+// makeArgsCaptureFakeGemini creates a fake "gemini" script that writes all args to a file
+// and returns a fake JSON response.
+func makeArgsCaptureFakeGemini(t *testing.T, argsFile string) {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "gemini")
+	content := fmt.Sprintf("#!/bin/sh\necho \"$*\" > %s\necho '{\"response\": \"done\"}'\n", argsFile)
+	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil {
+		t.Fatalf("makeArgsCaptureFakeGemini: %v", err)
+	}
+	origPath := os.Getenv("PATH")
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+origPath)
+}
+
+// TestDelegateTool_PromptAppend_Codex verifies that category_overrides.prompt_append
+// is appended to the prompt when routing to Codex.
+func TestDelegateTool_PromptAppend_Codex(t *testing.T) {
+	argsFile := filepath.Join(t.TempDir(), "codex-args.txt")
+	makeArgsCaptureFakeCodex(t, argsFile)
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OH_MY_BRIDGE_WORKSPACE_ROOT", t.TempDir())
+
+	mu.Lock()
+	origCfg := cfg
+	origCLIs := availableCLIs
+	cfg = Config{
+		Routes: map[string]string{"deep": "gpt-codex"},
+		Models: map[string]ModelDef{
+			"gpt-codex": {Command: "codex", Args: []string{}},
+		},
+		CategoryOverrides: map[string]CategoryOverride{
+			"deep": {PromptAppend: "APPEND_MARKER"},
+		},
+	}
+	availableCLIs = map[string]bool{"codex": true}
+	mu.Unlock()
+	t.Cleanup(func() {
+		mu.Lock()
+		cfg = origCfg
+		availableCLIs = origCLIs
+		mu.Unlock()
+	})
+
+	_, _, err := delegateTool(context.Background(), nil, delegateInput{
+		Prompt:   "base prompt",
+		Category: "deep",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	argsData, readErr := os.ReadFile(argsFile)
+	if readErr != nil {
+		t.Fatalf("failed to read args file: %v", readErr)
+	}
+	if !strings.Contains(string(argsData), "APPEND_MARKER") {
+		t.Errorf("expected prompt_append 'APPEND_MARKER' in codex args, got: %q", string(argsData))
+	}
+}
+
+// TestDelegateTool_PromptAppend_Gemini verifies that category_overrides.prompt_append
+// is appended to the prompt when routing to Gemini.
+func TestDelegateTool_PromptAppend_Gemini(t *testing.T) {
+	argsFile := filepath.Join(t.TempDir(), "gemini-args.txt")
+	makeArgsCaptureFakeGemini(t, argsFile)
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("OH_MY_BRIDGE_WORKSPACE_ROOT", t.TempDir())
+
+	mu.Lock()
+	origCfg := cfg
+	origCLIs := availableCLIs
+	cfg = Config{
+		Routes: map[string]string{"writing": "gemini-flash"},
+		Models: map[string]ModelDef{
+			"gemini-flash": {Command: "gemini", Args: []string{}},
+		},
+		CategoryOverrides: map[string]CategoryOverride{
+			"writing": {PromptAppend: "APPEND_MARKER"},
+		},
+	}
+	availableCLIs = map[string]bool{"gemini": true}
+	mu.Unlock()
+	t.Cleanup(func() {
+		mu.Lock()
+		cfg = origCfg
+		availableCLIs = origCLIs
+		mu.Unlock()
+	})
+
+	_, _, err := delegateTool(context.Background(), nil, delegateInput{
+		Prompt:   "base prompt",
+		Category: "writing",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	argsData, readErr := os.ReadFile(argsFile)
+	if readErr != nil {
+		t.Fatalf("failed to read args file: %v", readErr)
+	}
+	if !strings.Contains(string(argsData), "APPEND_MARKER") {
+		t.Errorf("expected prompt_append 'APPEND_MARKER' in gemini args, got: %q", string(argsData))
+	}
+}
+
 // TestDelegateTool_UnsupportedCommand_HardError verifies that an unsupported
 // command (not "codex" or "gemini") returns a hard error without fallback.
 func TestDelegateTool_UnsupportedCommand_HardError(t *testing.T) {

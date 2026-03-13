@@ -91,3 +91,66 @@ func TestCLIStatus_missing(t *testing.T) {
 		t.Errorf("expected missing, got %v", status.Kind)
 	}
 }
+
+func TestValidateConfig_CategoryOverrideOrphan(t *testing.T) {
+	c := Config{
+		Routes: map[string]string{
+			"deep": "gpt-5.3-codex",
+		},
+		Models: map[string]ModelDef{
+			"gpt-5.3-codex": {Command: "codex", Args: []string{}},
+		},
+		CategoryOverrides: map[string]CategoryOverride{
+			"nonexistent-category": {ReasoningEffort: "high"},
+		},
+	}
+	errs := validateConfigRules(c)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 warning error, got %d: %v", len(errs), errs)
+	}
+	if !errs[0].Warn {
+		t.Errorf("expected Warn=true for orphan category_override, got Warn=false")
+	}
+}
+
+func TestValidateConfig_CategoryOverrideValid(t *testing.T) {
+	c := Config{
+		Routes: map[string]string{
+			"deep":    "gpt-5.3-codex",
+			"writing": "gemini-3-flash",
+		},
+		Models: map[string]ModelDef{
+			"gpt-5.3-codex":  {Command: "codex", Args: []string{}},
+			"gemini-3-flash": {Command: "gemini", Args: []string{}},
+		},
+		CategoryOverrides: map[string]CategoryOverride{
+			"deep":    {ReasoningEffort: "high"},
+			"writing": {PromptAppend: "한국어로 작성하라."},
+		},
+	}
+	errs := validateConfigRules(c)
+	if len(errs) != 0 {
+		t.Errorf("expected no errors for valid category_overrides, got %v", errs)
+	}
+}
+
+func TestValidateConfig_CategoryOverrideInvalidEffort(t *testing.T) {
+	c := Config{
+		Routes: map[string]string{
+			"deep": "gpt-5.3-codex",
+		},
+		Models: map[string]ModelDef{
+			"gpt-5.3-codex": {Command: "codex", Args: []string{}},
+		},
+		CategoryOverrides: map[string]CategoryOverride{
+			"deep": {ReasoningEffort: "ultra"},
+		},
+	}
+	errs := validateConfigRules(c)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error for invalid reasoning_effort, got %d: %v", len(errs), errs)
+	}
+	if errs[0].Warn {
+		t.Errorf("expected Warn=false (hard error) for invalid reasoning_effort, got Warn=true")
+	}
+}

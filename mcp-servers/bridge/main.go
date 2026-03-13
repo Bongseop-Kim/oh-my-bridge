@@ -30,9 +30,16 @@ const (
 
 // Config is loaded from ~/.config/oh-my-bridge/config.json at startup.
 type Config struct {
-	Routes       map[string]string   `json:"routes"`
-	Models       map[string]ModelDef `json:"models"`
-	DefaultRoute string              `json:"default_route,omitempty"`
+	Routes            map[string]string              `json:"routes"`
+	Models            map[string]ModelDef            `json:"models"`
+	DefaultRoute      string                         `json:"default_route,omitempty"`
+	CategoryOverrides map[string]CategoryOverride    `json:"category_overrides,omitempty"`
+}
+
+// CategoryOverride holds per-category settings that override ModelDef defaults.
+type CategoryOverride struct {
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	PromptAppend    string `json:"prompt_append,omitempty"`
 }
 
 // ModelDef describes how to invoke a specific model via CLI.
@@ -409,10 +416,10 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 		return nil, delegateOutput{}, err
 	}
 
-	// Per-call reasoning_effort overrides config default.
-	reasoningEffort := input.ReasoningEffort
-	if reasoningEffort == "" {
-		reasoningEffort = modelDef.ReasoningEffort
+	reasoningEffort, promptAppend := resolveCategoryOverrides(input.Category, input, modelDef, c.CategoryOverrides)
+	finalPrompt := input.Prompt
+	if promptAppend != "" {
+		finalPrompt = input.Prompt + "\n\n" + promptAppend
 	}
 
 	start := time.Now()
@@ -420,7 +427,7 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 	switch modelDef.Command {
 	case "codex":
 		result, err = runCodex(ctx, runOptions{
-			Prompt:          input.Prompt,
+			Prompt:          finalPrompt,
 			CWD:             resolvedCwd,
 			ModelDef:        modelDef,
 			ReasoningEffort: reasoningEffort,
@@ -429,7 +436,7 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 		})
 	case "gemini":
 		result, err = runGemini(ctx, runOptions{
-			Prompt:   input.Prompt,
+			Prompt:   finalPrompt,
 			CWD:      resolvedCwd,
 			ModelDef: modelDef,
 			Timeout:  timeout,
@@ -502,11 +509,12 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 type statusInput struct{}
 
 type statusOutput struct {
-	Version    string                `json:"version"`
-	Routes     map[string]string     `json:"routes"`
-	Models     map[string]ModelDef   `json:"models"`
-	CLIStatus  map[string]bool       `json:"cli_status"`
-	ConfigPath string                `json:"config_path"`
+	Version           string                         `json:"version"`
+	Routes            map[string]string              `json:"routes"`
+	Models            map[string]ModelDef            `json:"models"`
+	CLIStatus         map[string]bool                `json:"cli_status"`
+	ConfigPath        string                         `json:"config_path"`
+	CategoryOverrides map[string]CategoryOverride    `json:"category_overrides,omitempty"`
 }
 
 func statusTool(ctx context.Context, _ *mcp.CallToolRequest, _ statusInput) (*mcp.CallToolResult, statusOutput, error) {
@@ -521,11 +529,12 @@ func statusTool(ctx context.Context, _ *mcp.CallToolRequest, _ statusInput) (*mc
 	configPath := filepath.Join(home, ".config", "oh-my-bridge", "config.json")
 	c, clis := getState()
 	out := statusOutput{
-		Version:    serverVersion,
-		Routes:     c.Routes,
-		Models:     c.Models,
-		CLIStatus:  clis,
-		ConfigPath: configPath,
+		Version:           serverVersion,
+		Routes:            c.Routes,
+		Models:            c.Models,
+		CLIStatus:         clis,
+		ConfigPath:        configPath,
+		CategoryOverrides: c.CategoryOverrides,
 	}
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
@@ -568,6 +577,22 @@ func resolveModel(category, modelOverride string, c Config, clis map[string]bool
 		return routeVal, d, true, reasonCLINotInstalled, nil
 	}
 	return routeVal, d, false, "", nil
+}
+
+// resolveCategoryOverrides returns the effective reasoningEffort and promptAppend
+// for a given category. Priority: per-call input > category_overrides > ModelDef default.
+func resolveCategoryOverrides(category string, input delegateInput, modelDef ModelDef, overrides map[string]CategoryOverride) (reasoningEffort, promptAppend string) {
+	reasoningEffort = modelDef.ReasoningEffort
+	if co, ok := overrides[category]; ok {
+		if co.ReasoningEffort != "" {
+			reasoningEffort = co.ReasoningEffort
+		}
+		promptAppend = co.PromptAppend
+	}
+	if input.ReasoningEffort != "" {
+		reasoningEffort = input.ReasoningEffort
+	}
+	return
 }
 
 func classifyCliError(err error) string {
@@ -658,21 +683,40 @@ func resolveCwd(workspaceRoot, cwd string) (string, error) {
 	return target, nil
 }
 
-// runGemini invokes the Gemini CLI. The --yolo flag enables YOLO approval mode,
-// which auto-approves tool calls (shell commands, file ops) while keeping the
-// sandbox active.
+// parseGeminiJSON extracts the "response" field from Gemini --output-format json output.
+// Falls back to raw text if parsing fails or the field is empty.
+func parseGeminiJSON(raw string) string {
+	var resp struct {
+		Response string `json:"response"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		return raw
+	}
+	if resp.Response != "" {
+		return resp.Response
+	}
+	return raw
+}
+
+// runGemini invokes the Gemini CLI with --approval-mode=yolo (auto-approves tool calls)
+// and --output-format json (structured output).
 func runGemini(ctx context.Context, opts runOptions) (cliResult, error) {
 	args := make([]string, len(opts.ModelDef.Args))
 	copy(args, opts.ModelDef.Args)
-	args = append(args, "-p", opts.Prompt, "--yolo")
+	args = append(args, "-p", opts.Prompt, "--approval-mode=yolo", "--output-format", "json")
 
-	return runCli(ctx, cliRequest{
+	result, err := runCli(ctx, cliRequest{
 		Command:     opts.ModelDef.Command,
 		Args:        args,
 		CWD:         opts.CWD,
 		Timeout:     opts.Timeout,
 		ErrorPrefix: "Gemini CLI",
 	})
+	if err != nil {
+		return cliResult{}, err
+	}
+	result.Text = parseGeminiJSON(result.Text)
+	return result, nil
 }
 
 func runCodex(ctx context.Context, opts runOptions) (cliResult, error) {
@@ -689,6 +733,7 @@ func runCodex(ctx context.Context, opts runOptions) (cliResult, error) {
 	args := make([]string, len(opts.ModelDef.Args))
 	copy(args, opts.ModelDef.Args)
 	args = append(args, "-o", outputFile)
+	args = append(args, "--skip-git-repo-check")
 
 	if opts.BypassApprovals {
 		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
