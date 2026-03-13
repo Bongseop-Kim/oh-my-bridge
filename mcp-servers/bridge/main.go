@@ -56,6 +56,7 @@ type delegateInput struct {
 	TimeoutMs       int    `json:"timeoutMs,omitempty" jsonschema:"Optional timeout in milliseconds. Maximum 300000."`
 	ReasoningEffort string `json:"reasoning_effort,omitempty" jsonschema:"Optional reasoning effort override. Overrides config default."`
 	BypassApprovals bool   `json:"bypassApprovals,omitempty" jsonschema:"If true, passes --dangerously-bypass-approvals-and-sandbox to Codex. Use only in trusted, sandboxed contexts."`
+	DryRun          bool   `json:"dryRun,omitempty" jsonschema:"If true, returns routing decision without executing the CLI."`
 }
 
 type delegateOutput struct {
@@ -306,6 +307,25 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 			Category:  input.Category,
 			Status:    "claude",
 		})
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: toJSONOrEmpty(out)},
+			},
+		}, out, nil
+	}
+
+	if input.DryRun {
+		reason := "config route"
+		if input.Model != "" {
+			reason = "model override"
+		}
+		out := delegateOutput{
+			Action:   "would_delegate",
+			Model:    modelName,
+			Category: input.Category,
+			Provider: modelDef.Command,
+			Reason:   reason,
+		}
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				&mcp.TextContent{Text: toJSONOrEmpty(out)},
