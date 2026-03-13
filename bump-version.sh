@@ -28,6 +28,13 @@ if [[ -z "$NEW_VERSION" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# main 브랜치에서만 실행 가능
+CURRENT_BRANCH=$(git -C "$SCRIPT_DIR" rev-parse --abbrev-ref HEAD)
+if [[ "$CURRENT_BRANCH" != "main" ]]; then
+  echo "Error: bump-version must be run on main branch (current: ${CURRENT_BRANCH})" >&2
+  exit 1
+fi
 PLUGIN_JSON="${SCRIPT_DIR}/.claude-plugin/plugin.json"
 MARKETPLACE_JSON="${SCRIPT_DIR}/.claude-plugin/marketplace.json"
 CLAUDE_MD="${SCRIPT_DIR}/CLAUDE.md"
@@ -81,10 +88,9 @@ fi
 git -C "$SCRIPT_DIR" add "${GIT_ADD_FILES[@]}"
 git -C "$SCRIPT_DIR" commit -m "chore: bump version to ${NEW_VERSION}"
 git -C "$SCRIPT_DIR" tag "v${NEW_VERSION}"
+git -C "$SCRIPT_DIR" push origin main "v${NEW_VERSION}"
 
 echo ""
 echo "Done. Next steps:"
-echo "  1. git push origin <branch> → PR → main 머지"
-echo "  2. git push origin v${NEW_VERSION}  ← 머지 후 이걸 push하면 GitHub Actions 빌드 시작"
-echo "  3. (2분 대기) Claude Code에서: /plugin update oh-my-bridge"
-echo "  4. Claude Code 재시작"
+echo "  1. (2분 대기) Claude Code에서: /plugin update oh-my-bridge"
+echo "  2. Claude Code 재시작"
