@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -24,3 +25,27 @@ func TestRunCli_FastExit(t *testing.T) {
 	t.Logf("fast-exit returned error immediately: %v", err)
 }
 
+// TestRunCli_Timeout verifies that runCli returns ErrTimeout when the CLI
+// does not finish within the configured TimeoutMs.
+//
+// Root cause of issue #11: all tasks share a fixed 5-minute ceiling, so
+// runCli must honour whatever TimeoutMs the caller provides — not a global
+// constant.
+func TestRunCli_Timeout(t *testing.T) {
+	slowCLI := makeSlowScript(t, 10)
+
+	_, err := runCli(context.Background(), cliRequest{
+		Command:     slowCLI,
+		Args:        []string{},
+		CWD:         t.TempDir(),
+		TimeoutMs:   50,
+		ErrorPrefix: "slow CLI",
+	})
+
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	if !errors.Is(err, ErrTimeout) {
+		t.Errorf("expected ErrTimeout, got: %v", err)
+	}
+}
