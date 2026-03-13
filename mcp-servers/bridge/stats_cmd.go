@@ -51,6 +51,7 @@ func runStats() {
 		return stats[key]
 	}
 
+	var malformedCount int
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -59,6 +60,7 @@ func runStats() {
 		}
 		var e logEntry
 		if err := json.Unmarshal(line, &e); err != nil {
+			malformedCount++
 			continue
 		}
 
@@ -79,6 +81,9 @@ func runStats() {
 			s.totalLatMs += e.LatencyMs
 			s.latCount++
 		}
+	}
+	if malformedCount > 0 {
+		fmt.Fprintf(os.Stderr, "stats: skipped %d malformed log line(s)\n", malformedCount)
 	}
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintf(os.Stderr, "stats: reading log: %v\n", err)

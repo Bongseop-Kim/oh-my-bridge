@@ -33,10 +33,14 @@ else
   fi
   TMPDIR=$(mktemp -d)
   if curl -fsSL "$URL" | tar -xz -C "$TMPDIR"; then
-    mv "$TMPDIR/oh-my-bridge" "$BINARY"
-    chmod +x "$BINARY"
-    rm -rf "$TMPDIR"
-    echo "OK: binary installed/updated successfully"
+    if mv "$TMPDIR/oh-my-bridge" "$BINARY" && chmod +x "$BINARY"; then
+      rm -rf "$TMPDIR"
+      echo "OK: binary installed/updated successfully"
+    else
+      rm -rf "$TMPDIR"
+      echo "ERROR: Failed to install binary."
+      exit 1
+    fi
   else
     rm -rf "$TMPDIR"
     echo "ERROR: Download failed."

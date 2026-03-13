@@ -228,7 +228,11 @@ func runDoctor() {
 	fmt.Println("oh-my-bridge doctor")
 	fmt.Println("───────────────────────────────────────")
 
-	printCheck("binary", "v"+serverVersion, true, "")
+	binaryPath, exeErr := os.Executable()
+	if exeErr != nil {
+		binaryPath = exeErr.Error()
+	}
+	printCheck("binary", "v"+serverVersion, true, binaryPath)
 
 	configData, err := os.ReadFile(configPath)
 	if err != nil {
