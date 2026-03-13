@@ -39,7 +39,7 @@ func TestRunCli_StabilityExit(t *testing.T) {
 // TestRunCli_FirstOutputTimeout verifies that runCli returns ErrTimeout when
 // the process produces no output within FirstOutputTimeoutMs.
 func TestRunCli_FirstOutputTimeout(t *testing.T) {
-	script := makeNoOutputScript(t, 30)
+	script := makeSlowScript(t, 30)
 
 	start := time.Now()
 	_, err := runCli(context.Background(), cliRequest{

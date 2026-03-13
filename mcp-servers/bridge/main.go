@@ -53,14 +53,12 @@ type timeoutConfig struct {
 type activityTracker struct {
 	mu           sync.Mutex
 	lastActivity time.Time
-	hasOutput    bool
 }
 
 func (a *activityTracker) Write(p []byte) (int, error) {
 	if len(p) > 0 {
 		a.mu.Lock()
 		a.lastActivity = time.Now()
-		a.hasOutput = true
 		a.mu.Unlock()
 	}
 	return len(p), nil
@@ -764,11 +762,10 @@ func runCli(parent context.Context, req cliRequest) (cliResult, error) {
 		case <-ticker.C:
 			now := time.Now()
 			tracker.mu.Lock()
-			hasOutput := tracker.hasOutput
 			lastActivity := tracker.lastActivity
 			tracker.mu.Unlock()
 
-			if !hasOutput {
+			if lastActivity.IsZero() {
 				if now.Sub(startTime) > time.Duration(req.Timeout.FirstOutputTimeoutMs)*time.Millisecond {
 					cancel()
 					<-waitCh
