@@ -30,8 +30,9 @@ const (
 
 // Config is loaded from ~/.config/oh-my-bridge/config.json at startup.
 type Config struct {
-	Routes map[string]string     `json:"routes"`
-	Models map[string]ModelDef   `json:"models"`
+	Routes       map[string]string   `json:"routes"`
+	Models       map[string]ModelDef `json:"models"`
+	DefaultRoute string              `json:"default_route,omitempty"`
 }
 
 // ModelDef describes how to invoke a specific model via CLI.
@@ -78,6 +79,8 @@ var (
 
 	// ErrTimeout is returned by runCli when the context deadline is exceeded.
 	ErrTimeout = errors.New("cli timeout")
+	// ErrUnsupportedCommand indicates no runner exists for the configured command.
+	ErrUnsupportedCommand = errors.New("unsupported command")
 )
 
 type delegateInput struct {
@@ -116,6 +119,7 @@ type logEntry struct {
 	StabilityExit bool   `json:"stability_exit,omitempty"`
 	Status        string `json:"status"`
 	Error         string `json:"error,omitempty"`
+	Reason        string `json:"reason,omitempty"`
 }
 
 // cliResult holds the text output from a CLI invocation.
@@ -166,6 +170,13 @@ func detectCLIs(c Config) map[string]bool {
 func reloadState() error {
 	cfgNew, err := loadConfig()
 	if err != nil {
+		mu.Lock()
+		hasState := cfg.Routes != nil && len(cfg.Models) > 0
+		mu.Unlock()
+		if hasState {
+			fmt.Fprintf(os.Stderr, "oh-my-bridge: config reload failed, using stale config: %v\n", err)
+			return nil
+		}
 		return err
 	}
 	clisNew := detectCLIs(cfgNew)
@@ -335,16 +346,15 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 	}
 
 	c, clis := getState()
-	modelName, modelDef, skip, err := resolveModel(input.Category, input.Model, c, clis)
+	modelName, modelDef, skip, skipReason, err := resolveModel(input.Category, input.Model, c, clis)
 	if err != nil {
 		return nil, delegateOutput{}, err
 	}
 	if skip {
-		reason := "Route configured as claude or CLI not installed. Handle directly."
 		out := delegateOutput{
 			Action:   "claude",
 			Category: input.Category,
-			Reason:   reason,
+			Reason:   skipReason,
 		}
 		writeLog(logEntry{
 			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
@@ -352,6 +362,7 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 			Provider:  "claude",
 			Category:  input.Category,
 			Status:    "claude",
+			Reason:    skipReason,
 		})
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -415,10 +426,14 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 			Timeout:  timeout,
 		})
 	default:
-		err = fmt.Errorf("unsupported command %q for model %q", modelDef.Command, modelName)
+		err = fmt.Errorf("%w: %q for model %q", ErrUnsupportedCommand, modelDef.Command, modelName)
 	}
 	if err != nil {
+		if errors.Is(err, ErrUnsupportedCommand) {
+			return nil, delegateOutput{}, err
+		}
 		timedOut := errors.Is(err, ErrTimeout)
+		errReason := classifyCliError(err, err.Error())
 		writeLog(logEntry{
 			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 			Model:     modelName,
@@ -426,10 +441,25 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 			Category:  input.Category,
 			LatencyMs: time.Since(start).Milliseconds(),
 			TimedOut:  timedOut,
-			Status:    "error",
+			Status:    "cli_error",
 			Error:     err.Error(),
+			Reason:    errReason,
 		})
-		return nil, delegateOutput{}, err
+		out := delegateOutput{
+			Action:   "claude",
+			Category: input.Category,
+			Model:    modelName,
+			Provider: modelDef.Command,
+			Reason:   fmt.Sprintf("%s: %s", errReason, err.Error()),
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: toJSONOrEmpty(out)}},
+		}, out, nil
+	}
+
+	responseText := result.Text
+	if result.StabilityExit {
+		responseText = "[WARNING: stability-exit — output may be incomplete, verify generated files]\n\n" + responseText
 	}
 
 	output := delegateOutput{
@@ -453,7 +483,7 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
-			&mcp.TextContent{Text: result.Text},
+			&mcp.TextContent{Text: responseText},
 		},
 	}, output, nil
 }
@@ -495,34 +525,51 @@ func statusTool(ctx context.Context, _ *mcp.CallToolRequest, _ statusInput) (*mc
 
 // resolveModel returns the model name, its definition, and whether Claude should handle directly.
 // If modelOverride is set, it bypasses config route lookup.
-func resolveModel(category, modelOverride string, c Config, clis map[string]bool) (modelName string, def ModelDef, skip bool, err error) {
+func resolveModel(category, modelOverride string, c Config, clis map[string]bool) (modelName string, def ModelDef, skip bool, reason string, err error) {
 	if modelOverride != "" {
 		d, ok := c.Models[modelOverride]
 		if !ok {
-			return "", ModelDef{}, false, fmt.Errorf("model override %q not found in config", modelOverride)
+			return "", ModelDef{}, false, "", fmt.Errorf("model override %q not found in config", modelOverride)
 		}
 		if !clis[d.Command] {
-			return modelOverride, d, true, nil
+			return modelOverride, d, true, "cli_not_installed", nil
 		}
-		return modelOverride, d, false, nil
+		return modelOverride, d, false, "", nil
 	}
 
 	routeVal, ok := c.Routes[category]
 	if !ok {
-		return "", ModelDef{}, false, fmt.Errorf("category %q not found in config routes", category)
+		if c.DefaultRoute != "" {
+			routeVal = c.DefaultRoute
+		} else {
+			return "", ModelDef{}, false, "", fmt.Errorf("category %q not found in config routes", category)
+		}
 	}
 	if routeVal == "claude" {
-		return "claude", ModelDef{}, true, nil
+		return "claude", ModelDef{}, true, "route_configured", nil
 	}
 
 	d, ok := c.Models[routeVal]
 	if !ok {
-		return "", ModelDef{}, false, fmt.Errorf("model %q (from route for category %q) not found in config models", routeVal, category)
+		return "", ModelDef{}, false, "", fmt.Errorf("model %q (from route for category %q) not found in config models", routeVal, category)
 	}
 	if !clis[d.Command] {
-		return routeVal, d, true, nil
+		return routeVal, d, true, "cli_not_installed", nil
 	}
-	return routeVal, d, false, nil
+	return routeVal, d, false, "", nil
+}
+
+func classifyCliError(err error, errMsg string) string {
+	if errors.Is(err, ErrTimeout) {
+		return "cli_error_timeout"
+	}
+	lower := strings.ToLower(errMsg)
+	if strings.Contains(lower, "rate limit") ||
+		strings.Contains(lower, "429") ||
+		strings.Contains(lower, "too many requests") {
+		return "cli_error_rate_limit"
+	}
+	return "cli_error_crash"
 }
 
 type runOptions struct {

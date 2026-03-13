@@ -135,6 +135,12 @@ mcp__bridge__delegate({
    Then report: file list + key decisions made.
 
 3. If response `action` is `"claude"`: handle the task directly with Claude native Edit/Write.
+   Check the `reason` field to understand why and adjust behavior:
+   - `route_configured`: route explicitly set to "claude" — handle directly as normal
+   - `cli_not_installed`: CLI binary missing — handle directly, optionally notify user
+   - `cli_error_timeout`: CLI timed out — handle directly; CLI was too slow for this task
+   - `cli_error_rate_limit`: API rate limit hit — handle directly; optionally advise user to retry later
+   - `cli_error_crash`: CLI exited non-zero — handle directly; consider checking CLI health
 
 4. If MCP call fails, check the error before falling back:
    - If error contains `"cwd must stay within workspace root"`:
