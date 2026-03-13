@@ -177,10 +177,9 @@ func runChecksCmd() tea.Cmd {
 			}
 		}
 		checks = append(checks, checkResult{
-			label: "8개 카테고리 모두 존재",
+			label: "8개 카테고리 필수 (모두 존재해야 함)",
 			pass:  missingCats == 0,
-			warn:  missingCats > 0,
-			msg:   fmt.Sprintf("%d개 기본 카테고리 누락", missingCats),
+			msg:   fmt.Sprintf("%d개 필수 카테고리 누락 (8개 모두 required)", missingCats),
 		})
 
 		if cfg.Routes != nil && cfg.Models != nil {

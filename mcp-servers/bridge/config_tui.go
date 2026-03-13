@@ -65,6 +65,8 @@ type tuiModel struct {
 	cursor     int      // screenList: 선택된 행, screenDropdown: 선택된 모델
 	listCursor int      // 드롭다운 진입 전 카테고리 인덱스 보존
 	dropdown   []string // buildDropdownOptions 결과
+
+	errMsg string // 저장 실패 메시지 (비어있으면 정상)
 }
 
 func newTUIModel() tuiModel {
@@ -119,9 +121,16 @@ func (m tuiModel) updateList(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor++
 		}
 	case "enter":
+		if len(m.categories) == 0 {
+			return m, nil
+		}
 		cat := m.categories[m.cursor]
 		m.listCursor = m.cursor
 		m.dropdown = buildDropdownOptions(m.models)
+		if len(m.dropdown) == 0 {
+			return m, nil
+		}
+		m.cursor = 0
 		for i, opt := range m.dropdown {
 			if opt == m.current[cat] {
 				m.cursor = i
@@ -158,8 +167,19 @@ func (m tuiModel) updateDropdown(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cursor++
 		}
 	case "enter":
-		cat := m.categories[m.listCursor]
-		m.current[cat] = m.dropdown[m.cursor]
+		if len(m.categories) == 0 || len(m.dropdown) == 0 {
+			return m, nil
+		}
+		listCursor := m.listCursor
+		if listCursor >= len(m.categories) {
+			listCursor = len(m.categories) - 1
+		}
+		cursor := m.cursor
+		if cursor >= len(m.dropdown) {
+			cursor = len(m.dropdown) - 1
+		}
+		cat := m.categories[listCursor]
+		m.current[cat] = m.dropdown[cursor]
 		m.cursor = m.listCursor
 		m.screen = screenList
 	case "esc":
@@ -175,7 +195,8 @@ func (m tuiModel) updateDiff(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		newCfg := cfg
 		newCfg.Routes = m.current
 		if err := saveConfig(newCfg); err != nil {
-			fmt.Fprintf(os.Stderr, "저장 실패: %v\n", err)
+			m.errMsg = fmt.Sprintf("저장 실패: %v", err)
+			return m, nil
 		}
 		return m, tea.Quit
 	case "esc":
@@ -280,6 +301,9 @@ func (m tuiModel) viewDiff() string {
 			line = styleWarn.Render(line)
 		}
 		b.WriteString(line + "\n")
+	}
+	if m.errMsg != "" {
+		b.WriteString("\n  " + styleWarn.Render(m.errMsg))
 	}
 	b.WriteString("\n  " + styleDim.Render("[Enter] 저장  [Esc] 취소"))
 	return styleBorder.Render(b.String())

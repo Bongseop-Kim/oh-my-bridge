@@ -86,70 +86,88 @@ type cliResult struct {
 	Text string
 }
 
-func loadConfig() error {
+func loadConfig() (Config, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Errorf("cannot determine home directory: %w", err)
+		return Config{}, fmt.Errorf("cannot determine home directory: %w", err)
 	}
 	configPath := filepath.Join(home, ".config", "oh-my-bridge", "config.json")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("config not found at %s — run /oh-my-bridge:setup to create it", configPath)
+			return Config{}, fmt.Errorf("config not found at %s — run /oh-my-bridge:setup to create it", configPath)
 		}
-		return fmt.Errorf("reading config: %w", err)
+		return Config{}, fmt.Errorf("reading config: %w", err)
 	}
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return fmt.Errorf("parsing config: %w", err)
+	var cfgNew Config
+	if err := json.Unmarshal(data, &cfgNew); err != nil {
+		return Config{}, fmt.Errorf("parsing config: %w", err)
 	}
-	return nil
+	return cfgNew, nil
 }
 
-func detectCLIs() {
+func detectCLIs(c Config) map[string]bool {
 	seen := make(map[string]bool)
-	availableCLIs = make(map[string]bool)
-	for _, def := range cfg.Models {
+	clis := make(map[string]bool)
+	for _, def := range c.Models {
 		if seen[def.Command] {
 			continue
 		}
 		seen[def.Command] = true
 		_, err := exec.LookPath(def.Command)
-		availableCLIs[def.Command] = (err == nil)
+		clis[def.Command] = (err == nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "oh-my-bridge: CLI not found: %q — routes using it will be skipped\n", def.Command)
 		}
 	}
+	return clis
 }
 
 // reloadState reloads config and detects CLI availability under a mutex lock.
 // Called on each delegate/status invocation to pick up runtime config changes.
 func reloadState() error {
-	mu.Lock()
-	defer mu.Unlock()
-	if err := loadConfig(); err != nil {
+	cfgNew, err := loadConfig()
+	if err != nil {
 		return err
 	}
-	detectCLIs()
+	clisNew := detectCLIs(cfgNew)
+
+	mu.Lock()
+	cfg = cfgNew
+	availableCLIs = clisNew
+	mu.Unlock()
 	return nil
+}
+
+func getState() (Config, map[string]bool) {
+	mu.Lock()
+	c := cfg
+	clis := availableCLIs
+	mu.Unlock()
+	return c, clis
 }
 
 func main() {
 	// config 서브커맨드 분기 — MCP 서버 기동 전에 처리
 	if len(os.Args) > 1 && os.Args[1] == "config" {
-		if err := loadConfig(); err != nil {
+		var err error
+		cfg, err = loadConfig()
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "oh-my-bridge: config load error: %v\n", err)
 			os.Exit(1)
 		}
-		detectCLIs()
+		availableCLIs = detectCLIs(cfg)
 		runConfigCommand(os.Args[2:])
 		return
 	}
 
 	// MCP 서버 모드 (기존 동작)
-	if err := loadConfig(); err != nil {
+	var err error
+	cfg, err = loadConfig()
+	if err != nil {
 		log.Fatalf("oh-my-bridge: %v", err)
 	}
-	detectCLIs()
+	availableCLIs = detectCLIs(cfg)
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    serverName,
@@ -186,7 +204,8 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 		return nil, delegateOutput{}, fmt.Errorf("timeoutMs must be between 0 and %d", maxTimeoutMs)
 	}
 
-	modelName, modelDef, skip, err := resolveModel(input.Category, input.Model)
+	c, clis := getState()
+	modelName, modelDef, skip, err := resolveModel(input.Category, input.Model, c, clis)
 	if err != nil {
 		return nil, delegateOutput{}, err
 	}
@@ -313,10 +332,11 @@ func statusTool(ctx context.Context, _ *mcp.CallToolRequest, _ statusInput) (*mc
 		return nil, statusOutput{}, fmt.Errorf("cannot determine home directory: %w", err)
 	}
 	configPath := filepath.Join(home, ".config", "oh-my-bridge", "config.json")
+	c, clis := getState()
 	out := statusOutput{
-		Routes:     cfg.Routes,
-		Models:     cfg.Models,
-		CLIStatus:  availableCLIs,
+		Routes:     c.Routes,
+		Models:     c.Models,
+		CLIStatus:  clis,
 		ConfigPath: configPath,
 	}
 	return &mcp.CallToolResult{
@@ -328,19 +348,19 @@ func statusTool(ctx context.Context, _ *mcp.CallToolRequest, _ statusInput) (*mc
 
 // resolveModel returns the model name, its definition, and whether Claude should handle directly.
 // If modelOverride is set, it bypasses config route lookup.
-func resolveModel(category, modelOverride string) (modelName string, def ModelDef, skip bool, err error) {
+func resolveModel(category, modelOverride string, c Config, clis map[string]bool) (modelName string, def ModelDef, skip bool, err error) {
 	if modelOverride != "" {
-		d, ok := cfg.Models[modelOverride]
+		d, ok := c.Models[modelOverride]
 		if !ok {
 			return "", ModelDef{}, false, fmt.Errorf("model override %q not found in config", modelOverride)
 		}
-		if !availableCLIs[d.Command] {
+		if !clis[d.Command] {
 			return modelOverride, d, true, nil
 		}
 		return modelOverride, d, false, nil
 	}
 
-	routeVal, ok := cfg.Routes[category]
+	routeVal, ok := c.Routes[category]
 	if !ok {
 		return "", ModelDef{}, false, fmt.Errorf("category %q not found in config routes", category)
 	}
@@ -348,11 +368,11 @@ func resolveModel(category, modelOverride string) (modelName string, def ModelDe
 		return "claude", ModelDef{}, true, nil
 	}
 
-	d, ok := cfg.Models[routeVal]
+	d, ok := c.Models[routeVal]
 	if !ok {
 		return "", ModelDef{}, false, fmt.Errorf("model %q (from route for category %q) not found in config models", routeVal, category)
 	}
-	if !availableCLIs[d.Command] {
+	if !clis[d.Command] {
 		return routeVal, d, true, nil
 	}
 	return routeVal, d, false, nil

@@ -161,6 +161,39 @@ Claude가 Edit 직접 사용. MCP 미호출.
 
 ---
 
+## Config 편집
+
+`~/.config/oh-my-bridge/config.json`의 라우트를 터미널에서 직접 수정할 수 있다.
+
+```bash
+# 인터랙티브 TUI 에디터 (기본)
+oh-my-bridge config
+
+# 현재 설정 테이블 출력
+oh-my-bridge config list
+
+# 설정 유효성 검사
+oh-my-bridge config validate
+```
+
+### TUI 에디터 조작법
+
+| 화면 | 키 | 동작 |
+| ---- | --- | ---- |
+| 목록 | `↑` / `↓` 또는 `k` / `j` | 카테고리 이동 |
+| 목록 | `Enter` | 모델 드롭다운 열기 |
+| 목록 | `s` | 변경사항 diff 미리보기 후 저장 |
+| 목록 | `q` / `Ctrl+C` | 종료 (미저장 시 확인) |
+| 드롭다운 | `↑` / `↓` | 모델 선택 |
+| 드롭다운 | `Enter` | 선택 확정 |
+| 드롭다운 | `Esc` | 취소 |
+| Diff | `Enter` | 저장 |
+| Diff | `Esc` | 취소 |
+
+각 카테고리 옆에 **CLI 상태** (`● codex ✔` / `✗ codex 없음` / `─ built-in`)가 표시되어 설치 여부를 즉시 확인할 수 있다. 저장은 atomic write(`.tmp` → rename)로 처리된다.
+
+---
+
 ## 로그
 
 ```bash
