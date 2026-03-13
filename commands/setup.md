@@ -124,6 +124,7 @@ HOOK_CMD="$HOME/.claude/hooks/subagent-code-routing.sh"
 
 # upsert: 기존 동일 command 제거 후 재등록 (중복 완전 방지)
 tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
 if jq --arg cmd "$HOOK_CMD" '
   (.hooks.SubagentStart // []) as $existing
   | ($existing | map(
@@ -134,6 +135,7 @@ if jq --arg cmd "$HOOK_CMD" '
 ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"; then
   echo "OK: SubagentStart hook registered in $SETTINGS"
 else
+  rm -f "$tmp"
   echo "ERROR: failed to update $SETTINGS" >&2
   exit 1
 fi

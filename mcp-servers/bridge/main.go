@@ -480,7 +480,7 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 	}
 
 	output := delegateOutput{
-		Response:      result.Text,
+		Response:      responseText,
 		CWD:           resolvedCwd,
 		Model:         modelName,
 		Category:      input.Category,
@@ -640,9 +640,7 @@ func resolveTimeout(input delegateInput) (timeoutConfig, error) {
 		return timeoutConfig{}, errors.New("firstOutputTimeoutMs must not exceed maxTimeoutMs")
 	}
 	if cfg.StabilityTimeoutMs > cfg.MaxTimeoutMs {
-		fmt.Fprintf(os.Stderr, "oh-my-bridge: stabilityTimeoutMs (%d) > maxTimeoutMs (%d), clamping\n",
-			cfg.StabilityTimeoutMs, cfg.MaxTimeoutMs)
-		cfg.StabilityTimeoutMs = cfg.MaxTimeoutMs
+		return timeoutConfig{}, errors.New("stabilityTimeoutMs must not exceed maxTimeoutMs")
 	}
 	return cfg, nil
 }

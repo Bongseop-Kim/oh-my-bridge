@@ -25,7 +25,8 @@ rm -f "$HOOK_CMD"
 
 if [ -f "$SETTINGS" ]; then
   tmp="$(mktemp)"
-  jq --arg cmd "$HOOK_CMD" '
+  trap 'rm -f "$tmp"' EXIT
+  if jq --arg cmd "$HOOK_CMD" '
     if .hooks.SubagentStart then
       .hooks.SubagentStart |= map(
         .hooks |= map(select(.command != $cmd))
@@ -33,8 +34,13 @@ if [ -f "$SETTINGS" ]; then
       | if (.hooks.SubagentStart | length) == 0 then del(.hooks.SubagentStart) else . end
       | if (.hooks | keys | length) == 0 then del(.hooks) else . end
     else . end
-  ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
-  echo "OK: hook removed from settings.json"
+  ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"; then
+    echo "OK: hook removed from settings.json"
+  else
+    rm -f "$tmp"
+    echo "ERROR: failed to update $SETTINGS" >&2
+    exit 1
+  fi
 fi
 ```
 
@@ -49,7 +55,7 @@ rm -rf ~/.claude/skills/oh-my-bridge
 ```bash
 ls ~/.claude/skills/oh-my-bridge 2>/dev/null && echo "ERROR: skill directory still exists" || echo "OK: skill directory removed"
 ls ~/.claude/hooks/subagent-code-routing.sh 2>/dev/null && echo "ERROR: hook script still exists" || echo "OK: hook script removed"
-jq -e '.hooks.SubagentStart? != null' "$HOME/.claude/settings.json" 2>/dev/null && echo "(see above)" || echo "OK: no settings.json or SubagentStart key absent"
+jq -e '.hooks.SubagentStart? != null' "$HOME/.claude/settings.json" 2>/dev/null && { echo "ERROR: SubagentStart key still present in $HOME/.claude/settings.json — please remove it manually" >&2; exit 1; } || echo "OK: no settings.json or SubagentStart key absent"
 ```
 
 5. **Report to user**
