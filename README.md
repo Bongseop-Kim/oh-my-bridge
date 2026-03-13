@@ -166,6 +166,10 @@ Claude가 Edit 직접 사용. MCP 미호출.
 `~/.config/oh-my-bridge/config.json`의 라우트를 터미널에서 직접 수정할 수 있다.
 
 ```bash
+oh-my-bridge --version   # 바이너리 버전 출력
+oh-my-bridge doctor      # 전체 환경 진단
+oh-my-bridge stats       # 모델별 사용 통계
+
 # 인터랙티브 TUI 에디터 (기본)
 oh-my-bridge config
 
@@ -194,9 +198,32 @@ oh-my-bridge config validate
 
 ---
 
+## 업데이트
+
+### 플러그인 파일 업데이트 (skills, commands)
+
+```text
+/plugin update oh-my-bridge
+```
+
+### 바이너리 포함 전체 업데이트
+
+`/plugin update`는 플러그인 파일만 갱신한다. Go 바이너리는 업데이트되지 않으므로 아래를 추가로 실행해야 한다.
+
+```text
+/oh-my-bridge:setup
+```
+
+setup은 설치된 바이너리 버전과 플러그인 버전을 비교해 다를 때만 다운로드한다.
+
+---
+
 ## 로그
 
 ```bash
+# 사용 통계 (모델별 호출 수 · 평균 응답 시간)
+oh-my-bridge stats
+
 # 최근 5건
 tail -5 ~/.claude/logs/oh-my-bridge.log | jq .
 
@@ -205,6 +232,48 @@ jq 'select(.status == "error")' ~/.claude/logs/oh-my-bridge.log
 
 # 오늘 사용량
 jq 'select(.timestamp | startswith("'"$(date -u +%Y-%m-%d)"'"))' ~/.claude/logs/oh-my-bridge.log
+```
+
+### stats 출력 예시
+
+```text
+oh-my-bridge stats
+
+모델별 호출 수  (오늘 / 전체)
+─────────────────────────────────────────
+gpt-5.3-codex           12 / 87    평균 응답 23.4s
+gemini-3-pro             5 / 41    평균 응답 11.2s
+claude (direct)          8 / 63    —
+─────────────────────────────────────────
+총 위임                    17 / 128
+```
+
+---
+
+## 진단
+
+### 버전 확인
+
+```bash
+oh-my-bridge --version
+```
+
+### 전체 환경 진단
+
+```bash
+oh-my-bridge doctor
+```
+
+```text
+oh-my-bridge doctor
+───────────────────────────────────────
+binary       v2.4.0     ✔
+config       ok         ✔  (~/.config/oh-my-bridge/config.json)
+skill        installed  ✔
+codex        found      ✔  (/usr/local/bin/codex)
+gemini       found      ✔  (/usr/local/bin/gemini)
+───────────────────────────────────────
+✔ all checks passed
 ```
 
 ---

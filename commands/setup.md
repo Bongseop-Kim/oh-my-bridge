@@ -18,21 +18,33 @@ ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
 BINARY="${CLAUDE_PLUGIN_ROOT}/mcp-servers/bridge/oh-my-bridge"
 URL="https://github.com/Bongseop-Kim/oh-my-bridge/releases/download/v${VERSION}/oh-my-bridge_${VERSION}_${OS}_${ARCH}.tar.gz"
 
+INSTALLED_VERSION=""
 if [ -x "$BINARY" ]; then
-  echo "OK: binary already exists at $BINARY"
+  INSTALLED_VERSION=$("$BINARY" --version 2>/dev/null || echo "")
+fi
+
+if [ "$INSTALLED_VERSION" = "$VERSION" ]; then
+  echo "OK: binary already up to date (v${VERSION})"
 else
-  echo "Downloading oh-my-bridge v${VERSION} for ${OS}/${ARCH}..."
+  if [ -n "$INSTALLED_VERSION" ]; then
+    echo "Updating oh-my-bridge v${INSTALLED_VERSION} → v${VERSION}..."
+  else
+    echo "Downloading oh-my-bridge v${VERSION} for ${OS}/${ARCH}..."
+  fi
   TMPDIR=$(mktemp -d)
   if curl -fsSL "$URL" | tar -xz -C "$TMPDIR"; then
-    mv "$TMPDIR/oh-my-bridge" "$BINARY"
-    chmod +x "$BINARY"
-    rm -rf "$TMPDIR"
-    echo "OK: downloaded successfully"
+    if mv "$TMPDIR/oh-my-bridge" "$BINARY" && chmod +x "$BINARY"; then
+      rm -rf "$TMPDIR"
+      echo "OK: binary installed/updated successfully"
+    else
+      rm -rf "$TMPDIR"
+      echo "ERROR: Failed to install binary."
+      exit 1
+    fi
   else
     rm -rf "$TMPDIR"
-    echo "ERROR: Download failed. Release v${VERSION} may not exist yet."
-    echo "  URL: $URL"
-    echo "  Check: https://github.com/Bongseop-Kim/oh-my-bridge/releases"
+    echo "ERROR: Download failed."
+    echo " URL: $URL"
     exit 1
   fi
 fi
@@ -157,7 +169,7 @@ cat ~/.config/oh-my-bridge/config.json | jq .routes
 ```
 
 Expected output:
-```
+```text
 OK: binary exists and is executable at .../oh-my-bridge
 -rwxr-xr-x  ...  oh-my-bridge
 ---
