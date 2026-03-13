@@ -63,12 +63,12 @@ Gemini는 UI를 잘 만들고, Claude는 판단을 잘한다. oh-my-bridge는
 
 | 카테고리             | 적용 작업                 | 기본 모델          |
 | -------------------- | ------------------------- | ------------------ |
-| `visual-engineering` | UI, CSS, SVG, 레이아웃    | gemini-3-pro       |
-| `ultrabrain`         | 알고리즘, 복잡한 아키텍처 | gpt-5.3-codex      |
-| `deep`               | 리팩토링, 복잡한 로직     | gpt-5.3-codex      |
-| `artistry`           | 창의적 패턴, 코드 스타일  | gemini-3-pro       |
-| `quick`              | 보일러플레이트, 단순 함수 | Claude (직접 처리) |
-| `writing`            | 문서, 주석, README        | gemini-3-flash     |
+| `visual-engineering` | UI, CSS, SVG, 레이아웃    | gemini-3-pro-preview    |
+| `ultrabrain`         | 알고리즘, 복잡한 아키텍처 | gpt-5.3-codex           |
+| `deep`               | 리팩토링, 복잡한 로직     | gpt-5.3-codex           |
+| `artistry`           | 창의적 패턴, 코드 스타일  | gemini-3-pro-preview    |
+| `quick`              | 보일러플레이트, 단순 함수 | Claude (직접 처리)      |
+| `writing`            | 문서, 주석, README        | gemini-3-flash-preview  |
 | `unspecified-high`   | 판단 어렵고 중요도 높음   | gpt-5.4            |
 | `unspecified-low`    | 판단 어렵고 중요도 낮음   | Claude (직접 처리) |
 
@@ -246,7 +246,7 @@ oh-my-bridge stats
 모델별 호출 수  (오늘 / 전체)
 ─────────────────────────────────────────
 gpt-5.3-codex           12 / 87    평균 응답 23.4s
-gemini-3-pro             5 / 41    평균 응답 11.2s
+gemini-3-pro-preview     5 / 41    평균 응답 11.2s
 claude (direct)          8 / 63    —
 ─────────────────────────────────────────
 총 위임                    17 / 128

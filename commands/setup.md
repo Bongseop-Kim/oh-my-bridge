@@ -188,12 +188,12 @@ fi
 cat > "$CONFIG_FILE" << 'CONF'
 {
   "routes": {
-    "visual-engineering": "gemini-3-pro",
+    "visual-engineering": "gemini-3-pro-preview",
     "ultrabrain": "gpt-5.3-codex",
     "deep": "gpt-5.3-codex",
-    "artistry": "gemini-3-pro",
+    "artistry": "gemini-3-pro-preview",
     "quick": "claude",
-    "writing": "gemini-3-flash",
+    "writing": "gemini-3-flash-preview",
     "unspecified-high": "gpt-5.4",
     "unspecified-low": "claude"
   },
@@ -201,10 +201,10 @@ cat > "$CONFIG_FILE" << 'CONF'
     "gpt-5.4":             {"command": "codex", "args": ["exec", "--full-auto", "-m", "gpt-5.4"]},
     "gpt-5.3-codex":       {"command": "codex", "args": ["exec", "--full-auto", "-m", "gpt-5.3-codex"]},
     "gpt-5.3-codex-spark": {"command": "codex", "args": ["exec", "--full-auto", "-m", "gpt-5.3-codex-spark"]},
-    "gemini-3-pro":        {"command": "gemini", "args": ["-m", "gemini-3-pro"]},
-    "gemini-3-flash":      {"command": "gemini", "args": ["-m", "gemini-3-flash"]},
-    "gemini-2.5-pro":      {"command": "gemini", "args": ["-m", "gemini-2.5-pro"]},
-    "gemini-2.5-flash":    {"command": "gemini", "args": ["-m", "gemini-2.5-flash"]}
+    "gemini-3-pro-preview":   {"command": "gemini", "args": ["-m", "gemini-3-pro-preview"]},
+    "gemini-3-flash-preview": {"command": "gemini", "args": ["-m", "gemini-3-flash-preview"]},
+    "gemini-2.5-pro":         {"command": "gemini", "args": ["-m", "gemini-2.5-pro"]},
+    "gemini-2.5-flash":       {"command": "gemini", "args": ["-m", "gemini-2.5-flash"]}
   }
 }
 CONF
@@ -244,7 +244,7 @@ description: ...
 OK: hook executable
 [{"hooks":[{"type":"command","command":"/Users/.../.claude/hooks/subagent-code-routing.sh","timeout":5}]}]
 {
-  "visual-engineering": "gemini-3-pro",
+  "visual-engineering": "gemini-3-pro-preview",
   ...
 }
 ```
