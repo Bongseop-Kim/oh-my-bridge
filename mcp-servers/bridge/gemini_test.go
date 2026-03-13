@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -144,7 +143,7 @@ func makeArgsEchoScript(t *testing.T) string {
 	dir := t.TempDir()
 	scriptPath := filepath.Join(dir, "args-echo-cli")
 	// Echo all args as JSON-like response so parseGeminiJSON passes through
-	content := fmt.Sprintf("#!/bin/sh\necho '{\"response\": \"'\"$*\"'\"}'\n")
+	content := "#!/bin/sh\necho '{\"response\": \"'\"$*\"'\"}'\n"
 	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil {
 		t.Fatalf("makeArgsEchoScript: %v", err)
 	}
