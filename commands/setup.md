@@ -169,7 +169,7 @@ cat ~/.config/oh-my-bridge/config.json | jq .routes
 ```
 
 Expected output:
-```
+```text
 OK: binary exists and is executable at .../oh-my-bridge
 -rwxr-xr-x  ...  oh-my-bridge
 ---
