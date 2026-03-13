@@ -84,7 +84,7 @@ bash tests/setup-test-project.sh
    - `Edit` / `Write` / `Bash` 직접 호출 → **Claude 직접 처리**
 4. 로그 확인 (선택):
    ```bash
-   tail -1 ~/.claude/logs/codex-usage.log | jq .
+   tail -1 ~/.claude/logs/oh-my-bridge.log | jq .
    ```
 5. 결과를 아래 기록 테이블에 입력
 

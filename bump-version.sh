@@ -8,8 +8,18 @@
 #   .claude-plugin/plugin.json          (version)
 #   .claude-plugin/marketplace.json     (metadata.version + plugins[0].version)
 #   CLAUDE.md                           (캐시 경로의 버전 문자열)
+#   mcp-servers/bridge/main.go          (serverVersion)
 
 set -euo pipefail
+
+# Portable in-place sed: macOS requires 'sed -i ""', Linux requires 'sed -i'
+sed_inplace() {
+  if [[ "$OSTYPE" == darwin* ]]; then
+    sed -i '' "$@"
+  else
+    sed -i "$@"
+  fi
+}
 
 NEW_VERSION="${1:-}"
 if [[ -z "$NEW_VERSION" ]]; then
@@ -21,6 +31,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_JSON="${SCRIPT_DIR}/.claude-plugin/plugin.json"
 MARKETPLACE_JSON="${SCRIPT_DIR}/.claude-plugin/marketplace.json"
 CLAUDE_MD="${SCRIPT_DIR}/CLAUDE.md"
+MAIN_GO="${SCRIPT_DIR}/mcp-servers/bridge/main.go"
 
 # 현재 버전 감지
 CURRENT_VERSION=$(jq -r '.version' "$PLUGIN_JSON")
@@ -42,15 +53,32 @@ echo "  Updated: $MARKETPLACE_JSON (metadata.version + plugins[0].version)"
 
 # CLAUDE.md — 캐시 경로 버전 문자열 업데이트
 if grep -q "$CURRENT_VERSION" "$CLAUDE_MD"; then
-  sed -i '' "s/${CURRENT_VERSION}/${NEW_VERSION}/g" "$CLAUDE_MD"
+  sed_inplace "s/${CURRENT_VERSION}/${NEW_VERSION}/g" "$CLAUDE_MD"
   echo "  Updated: $CLAUDE_MD"
 fi
 
+# main.go — serverVersion 업데이트
+MAIN_GO_UPDATED=false
+if grep -qE "serverVersion *= *\"${CURRENT_VERSION}\"" "$MAIN_GO"; then
+  sed_inplace "s/serverVersion *= *\"${CURRENT_VERSION}\"/serverVersion = \"${NEW_VERSION}\"/" "$MAIN_GO"
+  if grep -qE "serverVersion *= *\"${NEW_VERSION}\"" "$MAIN_GO"; then
+    echo "  Updated: $MAIN_GO (serverVersion)"
+    MAIN_GO_UPDATED=true
+  else
+    echo "Error: sed ran but serverVersion = \"${NEW_VERSION}\" not found in $MAIN_GO — aborting" >&2
+    exit 1
+  fi
+else
+  echo "Error: serverVersion = \"${CURRENT_VERSION}\" not found in $MAIN_GO — aborting" >&2
+  exit 1
+fi
+
 echo "  Committing and tagging v${NEW_VERSION}..."
-git -C "$SCRIPT_DIR" add \
-  "${PLUGIN_JSON}" \
-  "${MARKETPLACE_JSON}" \
-  "${CLAUDE_MD}"
+GIT_ADD_FILES=("${PLUGIN_JSON}" "${MARKETPLACE_JSON}" "${CLAUDE_MD}")
+if [[ "$MAIN_GO_UPDATED" == true ]]; then
+  GIT_ADD_FILES+=("${MAIN_GO}")
+fi
+git -C "$SCRIPT_DIR" add "${GIT_ADD_FILES[@]}"
 git -C "$SCRIPT_DIR" commit -m "chore: bump version to ${NEW_VERSION}"
 git -C "$SCRIPT_DIR" tag "v${NEW_VERSION}"
 
