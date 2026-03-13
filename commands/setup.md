@@ -104,9 +104,38 @@ echo "OK: ~/.claude.json updated with absolute path"
 ```bash
 mkdir -p ~/.claude/skills/oh-my-bridge
 cp "${CLAUDE_PLUGIN_ROOT}/skills/code-routing.md" ~/.claude/skills/oh-my-bridge/SKILL.md
+cp "${CLAUDE_PLUGIN_ROOT}/skills/code-routing-slim.md" ~/.claude/skills/oh-my-bridge/code-routing-slim.md
 ```
 
-5. **Install shell alias**
+5. **Install SubagentStart hook**
+
+Copy the hook script and register it in `~/.claude/settings.json` so every spawned subagent automatically receives the slim code-routing context.
+
+```bash
+mkdir -p ~/.claude/hooks
+cp "${CLAUDE_PLUGIN_ROOT}/hooks/subagent-code-routing.sh" ~/.claude/hooks/subagent-code-routing.sh
+chmod +x ~/.claude/hooks/subagent-code-routing.sh
+
+SETTINGS="$HOME/.claude/settings.json"
+HOOK_CMD="$HOME/.claude/hooks/subagent-code-routing.sh"
+
+# settings.json 없으면 초기화
+[ -f "$SETTINGS" ] || echo '{}' > "$SETTINGS"
+
+# upsert: 기존 동일 command 제거 후 재등록 (중복 완전 방지)
+tmp="$(mktemp)"
+jq --arg cmd "$HOOK_CMD" '
+  (.hooks.SubagentStart // []) as $existing
+  | ($existing | map(
+      .hooks |= map(select(.command != $cmd))
+    ) | map(select(.hooks | length > 0))
+  ) as $cleaned
+  | .hooks.SubagentStart = $cleaned + [{"hooks":[{"type":"command","command":$cmd,"timeout":5}]}]
+' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+echo "OK: SubagentStart hook registered in $SETTINGS"
+```
+
+6. **Install shell alias**
 
 ```bash
 SHELL_RC=""
@@ -141,7 +170,7 @@ else
 fi
 ```
 
-6. **Generate config**
+7. **Generate config**
 
 ```bash
 CONFIG_DIR="$HOME/.config/oh-my-bridge"
@@ -182,7 +211,7 @@ CONF
 echo "OK: config written to $CONFIG_FILE"
 ```
 
-7. **Verify installation**
+8. **Verify installation**
 
 ```bash
 # Verify Go binary
@@ -197,6 +226,10 @@ fi
 # Verify skill
 head -3 ~/.claude/skills/oh-my-bridge/SKILL.md
 
+# Verify hook
+test -x "$HOME/.claude/hooks/subagent-code-routing.sh" && echo "OK: hook executable" || echo "ERROR: hook missing or not executable"
+jq '.hooks.SubagentStart' "$HOME/.claude/settings.json"
+
 # Verify config
 cat ~/.config/oh-my-bridge/config.json | jq .routes
 ```
@@ -208,16 +241,20 @@ OK: binary exists and is executable at .../oh-my-bridge
 ---
 name: oh-my-bridge:code-routing
 description: ...
+OK: hook executable
+[{"hooks":[{"type":"command","command":"/Users/.../.claude/hooks/subagent-code-routing.sh","timeout":5}]}]
 {
   "visual-engineering": "gemini-3-pro",
   ...
 }
 ```
 
-8. **Report to user**
+9. **Report to user**
 
 Tell the user:
 - Skill installed to `~/.claude/skills/oh-my-bridge/SKILL.md`
+- Slim routing rules installed to `~/.claude/skills/oh-my-bridge/code-routing-slim.md`
+- SubagentStart hook installed to `~/.claude/hooks/subagent-code-routing.sh` — subagents will automatically inherit code-routing rules
 - Config written to `~/.config/oh-my-bridge/config.json`
   - Routes (category → model) and model definitions are in the config
   - Edit the config to customize routing — `/oh-my-bridge:setup` resets it to defaults, so back up custom settings first
