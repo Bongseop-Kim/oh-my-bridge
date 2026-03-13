@@ -44,7 +44,7 @@ func makeIncrementalOutputScript(t *testing.T, chunks int, intervalMs int, final
 	lines := "#!/bin/sh\n"
 	for i := 0; i < chunks; i++ {
 		lines += "echo chunk" + strconv.Itoa(i) + "\n"
-		lines += fmt.Sprintf("sleep 0.%03d\n", intervalMs)
+		lines += fmt.Sprintf("sleep %.3f\n", float64(intervalMs)/1000.0)
 	}
 	lines += "sleep " + strconv.Itoa(finalSleepSec) + "\n"
 	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil {

@@ -64,6 +64,12 @@ func (a *activityTracker) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+func (a *activityTracker) LastActivity() time.Time {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.lastActivity
+}
+
 var (
 	cfg           Config
 	availableCLIs map[string]bool
@@ -761,9 +767,7 @@ func runCli(parent context.Context, req cliRequest) (cliResult, error) {
 
 		case <-ticker.C:
 			now := time.Now()
-			tracker.mu.Lock()
-			lastActivity := tracker.lastActivity
-			tracker.mu.Unlock()
+			lastActivity := tracker.LastActivity()
 
 			if lastActivity.IsZero() {
 				if now.Sub(startTime) > time.Duration(req.Timeout.FirstOutputTimeoutMs)*time.Millisecond {
