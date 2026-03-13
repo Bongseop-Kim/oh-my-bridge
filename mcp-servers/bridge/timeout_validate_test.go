@@ -1,51 +1,29 @@
 package main
 
 import (
-	"context"
-	"strings"
 	"testing"
 )
 
-// TestMaxTimeoutMs_Value pins the maxTimeoutMs constant to 300000.
-// Issue #11: this ceiling prevents large tasks from getting more time,
-// even when explicitly requested by the caller.
-func TestMaxTimeoutMs_Value(t *testing.T) {
-	const want = 300000
-	if maxTimeoutMs != want {
-		t.Errorf("maxTimeoutMs = %d, want %d", maxTimeoutMs, want)
+// TestDefaultMaxTimeoutMs_Value pins the defaultMaxTimeoutMs constant to 1800000 (30 min).
+func TestDefaultMaxTimeoutMs_Value(t *testing.T) {
+	const want = 1800000
+	if defaultMaxTimeoutMs != want {
+		t.Errorf("defaultMaxTimeoutMs = %d, want %d", defaultMaxTimeoutMs, want)
 	}
 }
 
-// TestDelegateTool_TimeoutExceedsMax verifies that delegateTool rejects
-// timeoutMs values above maxTimeoutMs.
-//
-// Issue #11: the 300000ms ceiling means large tasks cannot request more time,
-// even when explicitly passed by the caller.
-func TestDelegateTool_TimeoutExceedsMax(t *testing.T) {
-	_, _, err := delegateTool(context.Background(), nil, delegateInput{
-		Prompt:    "test prompt",
-		Category:  "quick",
-		TimeoutMs: maxTimeoutMs + 1,
-	})
-	if err == nil {
-		t.Fatal("expected error for timeoutMs > maxTimeoutMs, got nil")
-	}
-	if !strings.Contains(err.Error(), "timeoutMs must be between") {
-		t.Errorf("unexpected error message: %v", err)
+// TestDefaultFirstOutputTimeoutMs_Value pins the defaultFirstOutputTimeoutMs constant to 30000.
+func TestDefaultFirstOutputTimeoutMs_Value(t *testing.T) {
+	const want = 30000
+	if defaultFirstOutputTimeoutMs != want {
+		t.Errorf("defaultFirstOutputTimeoutMs = %d, want %d", defaultFirstOutputTimeoutMs, want)
 	}
 }
 
-// TestDelegateTool_TimeoutNegative verifies that delegateTool rejects negative timeoutMs.
-func TestDelegateTool_TimeoutNegative(t *testing.T) {
-	_, _, err := delegateTool(context.Background(), nil, delegateInput{
-		Prompt:    "test prompt",
-		Category:  "quick",
-		TimeoutMs: -1,
-	})
-	if err == nil {
-		t.Fatal("expected error for negative timeoutMs, got nil")
-	}
-	if !strings.Contains(err.Error(), "timeoutMs must be between") {
-		t.Errorf("unexpected error message: %v", err)
+// TestDefaultStabilityTimeoutMs_Value pins the defaultStabilityTimeoutMs constant to 10000.
+func TestDefaultStabilityTimeoutMs_Value(t *testing.T) {
+	const want = 10000
+	if defaultStabilityTimeoutMs != want {
+		t.Errorf("defaultStabilityTimeoutMs = %d, want %d", defaultStabilityTimeoutMs, want)
 	}
 }

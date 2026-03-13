@@ -32,6 +32,48 @@ func makeFastExitScript(t *testing.T, exitCode int) string {
 	return scriptPath
 }
 
+// makeIncrementalOutputScript creates a script that emits `chunks` lines at
+// `intervalMs` ms intervals, then sleeps for `finalSleepSec` seconds.
+// Useful for testing stability-timeout behaviour.
+func makeIncrementalOutputScript(t *testing.T, chunks int, intervalMs int, finalSleepSec int) string {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "incremental-cli")
+	// Build the script body
+	lines := "#!/bin/sh\n"
+	for i := 0; i < chunks; i++ {
+		lines += "echo chunk" + itoa(i) + "\n"
+		lines += "sleep 0." + zeroPad(intervalMs, 3) + "\n"
+	}
+	lines += "sleep " + itoa(finalSleepSec) + "\n"
+	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil {
+		t.Fatalf("makeIncrementalOutputScript: %v", err)
+	}
+	return scriptPath
+}
+
+// makeNoOutputScript creates a script that sleeps without producing any output.
+// Useful for testing first-output-timeout behaviour.
+func makeNoOutputScript(t *testing.T, sleepSec int) string {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "no-output-cli")
+	content := "#!/bin/sh\nsleep " + itoa(sleepSec) + "\n"
+	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil {
+		t.Fatalf("makeNoOutputScript: %v", err)
+	}
+	return scriptPath
+}
+
+// zeroPad returns n as a zero-padded decimal string of exactly `width` digits.
+func zeroPad(n, width int) string {
+	s := itoa(n)
+	for len(s) < width {
+		s = "0" + s
+	}
+	return s
+}
+
 // itoa converts a non-negative integer to its decimal string representation.
 func itoa(n int) string {
 	if n == 0 {

@@ -15,7 +15,7 @@ func TestRunCli_FastExit(t *testing.T) {
 		Command:     fakeCLI,
 		Args:        []string{},
 		CWD:         t.TempDir(),
-		TimeoutMs:   5000,
+		Timeout:     timeoutConfig{MaxTimeoutMs: 5000, FirstOutputTimeoutMs: 3000, StabilityTimeoutMs: 2000},
 		ErrorPrefix: "Codex CLI",
 	})
 
@@ -38,7 +38,7 @@ func TestRunCli_Timeout(t *testing.T) {
 		Command:     slowCLI,
 		Args:        []string{},
 		CWD:         t.TempDir(),
-		TimeoutMs:   50,
+		Timeout:     timeoutConfig{MaxTimeoutMs: 50, FirstOutputTimeoutMs: 30, StabilityTimeoutMs: 20},
 		ErrorPrefix: "slow CLI",
 	})
 
