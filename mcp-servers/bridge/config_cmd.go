@@ -12,6 +12,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+var validReasoningEfforts = map[string]bool{"low": true, "medium": true, "high": true}
+
 // defaultCategories는 code-routing.md에 정의된 8개 고정 카테고리다.
 var defaultCategories = []string{
 	"visual-engineering",
@@ -96,9 +98,8 @@ func validateConfigRules(c Config) []validationError {
 		}
 	}
 
-	validEfforts := map[string]bool{"low": true, "medium": true, "high": true}
 	for cat, co := range c.CategoryOverrides {
-		if co.ReasoningEffort != "" && !validEfforts[co.ReasoningEffort] {
+		if co.ReasoningEffort != "" && !validReasoningEfforts[co.ReasoningEffort] {
 			errs = append(errs, validationError{
 				Rule:    "category_overrides reasoning_effort 값",
 				Message: fmt.Sprintf("category_overrides[%s].reasoning_effort=%q: low/medium/high 중 하나여야 합니다", cat, co.ReasoningEffort),
@@ -146,17 +147,15 @@ func printConfigTable() {
 		model := cfg.Routes[cat]
 		status := cliStatusFor(model, cfg.Models, availableCLIs)
 		override := ""
-		if cfg.CategoryOverrides != nil {
-			if co, ok := cfg.CategoryOverrides[cat]; ok {
-				parts := []string{}
-				if co.ReasoningEffort != "" {
-					parts = append(parts, "effort="+co.ReasoningEffort)
-				}
-				if co.PromptAppend != "" {
-					parts = append(parts, "prompt_append")
-				}
-				override = strings.Join(parts, " ")
+		if co, ok := cfg.CategoryOverrides[cat]; ok {
+			var parts []string
+			if co.ReasoningEffort != "" {
+				parts = append(parts, "effort="+co.ReasoningEffort)
 			}
+			if co.PromptAppend != "" {
+				parts = append(parts, "prompt_append")
+			}
+			override = strings.Join(parts, " ")
 		}
 		fmt.Printf("%-22s %-20s %-14s %s\n", cat, model, cliStatusString(status), override)
 	}
