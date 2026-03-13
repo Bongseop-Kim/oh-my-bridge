@@ -24,7 +24,7 @@ else
   echo "Downloading oh-my-bridge v${VERSION} for ${OS}/${ARCH}..."
   TMPDIR=$(mktemp -d)
   if curl -fsSL "$URL" | tar -xz -C "$TMPDIR"; then
-    mv "$TMPDIR"/oh-my-bridge*/oh-my-bridge "$BINARY"
+    mv "$TMPDIR/oh-my-bridge" "$BINARY"
     chmod +x "$BINARY"
     rm -rf "$TMPDIR"
     echo "OK: downloaded successfully"
