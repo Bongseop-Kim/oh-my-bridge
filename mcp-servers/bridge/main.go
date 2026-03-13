@@ -169,6 +169,10 @@ func main() {
 		runDoctor()
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "stats" {
+		runStats()
+		return
+	}
 
 	// MCP 서버 모드 (기존 동작)
 	var err error
