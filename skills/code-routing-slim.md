@@ -9,16 +9,18 @@ type: subagent
 ## Routing Rules
 
 Before any Write/Edit call, decide:
+
 - Logic changes (new functions/classes, refactoring, business logic) → delegate via `mcp__bridge__delegate`
 - Simple edits (typos, config, docs, className, constants) → Claude handles directly
 
 ## How to Delegate
 
-```
+```text
 mcp__bridge__delegate({ prompt, category, cwd })
 ```
 
 Category options:
+
 - `visual-engineering`: UI/CSS/SVG/layout
 - `ultrabrain`: algorithms/complex architecture
 - `deep`: refactoring/multi-file logic

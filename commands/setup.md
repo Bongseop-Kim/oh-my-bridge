@@ -124,15 +124,19 @@ HOOK_CMD="$HOME/.claude/hooks/subagent-code-routing.sh"
 
 # upsert: 기존 동일 command 제거 후 재등록 (중복 완전 방지)
 tmp="$(mktemp)"
-jq --arg cmd "$HOOK_CMD" '
+if jq --arg cmd "$HOOK_CMD" '
   (.hooks.SubagentStart // []) as $existing
   | ($existing | map(
       .hooks |= map(select(.command != $cmd))
     ) | map(select(.hooks | length > 0))
   ) as $cleaned
   | .hooks.SubagentStart = $cleaned + [{"hooks":[{"type":"command","command":$cmd,"timeout":5}]}]
-' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
-echo "OK: SubagentStart hook registered in $SETTINGS"
+' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"; then
+  echo "OK: SubagentStart hook registered in $SETTINGS"
+else
+  echo "ERROR: failed to update $SETTINGS" >&2
+  exit 1
+fi
 ```
 
 6. **Install shell alias**

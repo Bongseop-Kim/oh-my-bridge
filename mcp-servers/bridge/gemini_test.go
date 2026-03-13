@@ -177,8 +177,8 @@ func TestRunGemini_ArgsContainApprovalMode(t *testing.T) {
 	if !strings.Contains(result.Text, "--approval-mode=yolo") {
 		t.Errorf("expected --approval-mode=yolo in args, got: %q", result.Text)
 	}
-	if !strings.Contains(result.Text, "--output-format") {
-		t.Errorf("expected --output-format in args, got: %q", result.Text)
+	if !strings.Contains(result.Text, "--output-format json") {
+		t.Errorf("expected --output-format json in args, got: %q", result.Text)
 	}
 }
 

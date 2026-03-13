@@ -1,6 +1,32 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+const fixtureConfig = `{
+  "models": {
+    "codex-test": {
+      "command": "codex",
+      "args": ["--full-auto", "-m", "o4-mini"]
+    }
+  }
+}`
+
+func writeFixtureConfig(t *testing.T) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	dir := filepath.Join(home, ".config", "oh-my-bridge")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("writeFixtureConfig: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(fixtureConfig), 0644); err != nil {
+		t.Fatalf("writeFixtureConfig: %v", err)
+	}
+}
 
 // TestConfig_CodexModelsHaveFullAuto verifies that all codex models in config
 // include --full-auto in their args.
@@ -8,6 +34,8 @@ import "testing"
 // Root cause of issue #10: without --full-auto, codex exec waits for approval
 // prompts interactively, causing an indefinite hang.
 func TestConfig_CodexModelsHaveFullAuto(t *testing.T) {
+	writeFixtureConfig(t)
+
 	cfg, err := loadConfig()
 	if err != nil {
 		t.Fatalf("failed to load config: %v", err)
@@ -33,6 +61,8 @@ func TestConfig_CodexModelsHaveFullAuto(t *testing.T) {
 // TestConfig_CodexArgsOrder verifies that --full-auto appears before -m in codex args.
 // codex exec --full-auto -m <model> is the correct invocation order.
 func TestConfig_CodexArgsOrder(t *testing.T) {
+	writeFixtureConfig(t)
+
 	cfg, err := loadConfig()
 	if err != nil {
 		t.Fatalf("failed to load config: %v", err)

@@ -49,7 +49,7 @@ rm -rf ~/.claude/skills/oh-my-bridge
 ```bash
 ls ~/.claude/skills/oh-my-bridge 2>/dev/null && echo "ERROR: skill directory still exists" || echo "OK: skill directory removed"
 ls ~/.claude/hooks/subagent-code-routing.sh 2>/dev/null && echo "ERROR: hook script still exists" || echo "OK: hook script removed"
-jq '.hooks.SubagentStart' "$HOME/.claude/settings.json" 2>/dev/null && echo "(see above)" || echo "OK: no settings.json or SubagentStart key absent"
+jq -e '.hooks.SubagentStart? != null' "$HOME/.claude/settings.json" 2>/dev/null && echo "(see above)" || echo "OK: no settings.json or SubagentStart key absent"
 ```
 
 5. **Report to user**

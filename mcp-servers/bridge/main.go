@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -763,12 +762,12 @@ func runCodex(ctx context.Context, opts runOptions) (cliResult, error) {
 	data, readErr := os.ReadFile(outputFile)
 	if readErr == nil {
 		if text := strings.TrimSpace(string(data)); text != "" {
-			return cliResult{Text: text}, nil
+			return cliResult{Text: text, StabilityExit: result.StabilityExit}, nil
 		}
 	}
 
 	log.Printf("runCodex: no output from stdout or output file %s; returning (done)", outputFile)
-	return cliResult{Text: "(done)"}, nil
+	return cliResult{Text: "(done)", StabilityExit: result.StabilityExit}, nil
 }
 
 type cliRequest struct {
@@ -786,18 +785,7 @@ func runCli(parent context.Context, req cliRequest) (cliResult, error) {
 	cmd := exec.CommandContext(ctx, req.Command, req.Args...)
 	cmd.Dir = req.CWD
 	cmd.Env = os.Environ()
-	// Put the process in its own process group so SIGTERM reaches all
-	// descendant processes (e.g. grandchild `sleep` spawned by a shell script).
-	// Without this, grandchildren keep the pipe write-end open and io.Copy
-	// never returns EOF.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error {
-		if cmd.Process == nil {
-			return nil
-		}
-		// Negative PID sends to the entire process group.
-		return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
-	}
+	setupProc(cmd)
 	cmd.WaitDelay = 2 * time.Second
 
 	stdoutPipe, err := cmd.StdoutPipe()
