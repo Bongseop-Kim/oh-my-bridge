@@ -24,6 +24,10 @@ npm install -g @openai/codex
 npm install -g @google/gemini-cli
 codex --version  # 설치 확인
 gemini --version
+
+# (선택) 린터 + pre-commit
+brew install golangci-lint  # v1.64.x
+go install github.com/evilmartians/lefthook@latest
 ```
 
 ## 핵심 명령어
@@ -94,6 +98,37 @@ echo "hello"
 ```
 
 언어를 알 수 없는 경우 `text`를 사용한다.
+
+## 코드 품질 검사
+
+Go 소스 변경 시 커밋 전에 아래 명령어를 실행한다.
+
+```bash
+cd mcp-servers/bridge
+
+# 포맷 확인 (출력이 없으면 정상)
+gofmt -l .
+
+# 정적 분석
+go vet ./...
+
+# 종합 린트 (CI와 동일)
+golangci-lint run --config .golangci.yml
+
+# 테스트 (CI와 동일 timeout)
+go test -count=1 -race -timeout 120s ./...
+```
+
+CI(`ci.yml`)가 PR마다 lint + test를 자동 실행한다.
+
+### Pre-commit 훅 (lefthook)
+
+```bash
+go install github.com/evilmartians/lefthook@latest
+lefthook install
+```
+
+`lefthook install` 이후 `git commit` 시 자동으로 gofmt, go vet, golangci-lint가 실행된다.
 
 ## 동작 확인
 

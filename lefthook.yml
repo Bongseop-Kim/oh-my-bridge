@@ -1,0 +1,15 @@
+pre-commit:
+  parallel: true
+  commands:
+    gofmt-check:
+      glob: "**/*.go"
+      root: mcp-servers/bridge
+      run: test -z "$(gofmt -l .)"
+    go-vet:
+      glob: "**/*.go"
+      root: mcp-servers/bridge
+      run: go vet ./...
+    golangci-lint:
+      glob: "**/*.go"
+      root: mcp-servers/bridge
+      run: golangci-lint run --config .golangci.yml
