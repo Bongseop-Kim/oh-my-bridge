@@ -48,8 +48,11 @@ func runDoctor() {
 	binaryPath, exeErr := os.Executable()
 	if exeErr != nil {
 		binaryPath = exeErr.Error()
+		failed++
+		printCheck("binary", "v"+serverVersion, false, binaryPath)
+	} else {
+		printCheck("binary", "v"+serverVersion, true, binaryPath)
 	}
-	printCheck("binary", "v"+serverVersion, true, binaryPath)
 
 	configData, err := os.ReadFile(configPath) //nolint:gosec
 	if err != nil {

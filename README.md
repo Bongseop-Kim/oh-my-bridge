@@ -41,7 +41,7 @@ Gemini는 UI를 잘 만들고, Claude는 판단을 잘한다. oh-my-bridge는
 | 섹션          | 역할           | 결정                                                             |
 | ------------- | -------------- | ---------------------------------------------------------------- |
 | Routing rule  | 위임 여부 판단 | "결과에 실행 가능한 로직이 포함되는가?" → delegate / direct      |
-| Model Routing | 모델 선택      | 카테고리 분류 → config 라우트에서 단일 모델 결정 (fallback 없음) |
+| Model Routing | 모델 선택      | 카테고리 분류 → config 라우트에서 단일 모델 결정 (default_route 미설정 시 fallback 없음) |
 
 설계 결정의 근거: [docs/architecture.md](docs/architecture.md)
 
@@ -59,7 +59,7 @@ Gemini는 UI를 잘 만들고, Claude는 판단을 잘한다. oh-my-bridge는
 
 ## 카테고리별 모델 라우팅
 
-작업을 분류하면 `~/.config/oh-my-bridge/config.json`의 라우트 설정에서 단일 모델이 결정된다. 자동 전환(fallback)은 없다.
+작업을 분류하면 `~/.config/oh-my-bridge/config.json`의 라우트 설정에서 단일 모델이 결정된다. `default_route` 미설정 시 자동 전환(fallback)은 없다.
 
 | 카테고리             | 적용 작업                 | 기본 모델          |
 | -------------------- | ------------------------- | ------------------ |
