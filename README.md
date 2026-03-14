@@ -113,7 +113,7 @@ curl -sSL https://raw.githubusercontent.com/Bongseop-Kim/oh-my-bridge/main/insta
 한 번에 처리됨:
 
 1. 최신 바이너리 다운로드 → `~/.local/bin/oh-my-bridge`
-2. `claude mcp add bridge --scope user` — MCP 서버 등록
+2. `claude mcp add bridge --scope user -- ~/.local/bin/oh-my-bridge` — MCP 서버 등록
 3. `oh-my-bridge install-skills` — Skill, hook, config 설치
 
 Claude Code를 재시작하면 `code-routing` Skill이 자동 적용된다.
