@@ -8,8 +8,8 @@ pre-commit:
     go-vet:
       glob: "**/*.go"
       root: mcp-servers/bridge
-      run: go vet ./...
+      run: (cd ../.. && make embed) && go vet ./...
     golangci-lint:
       glob: "**/*.go"
       root: mcp-servers/bridge
-      run: golangci-lint run --config .golangci.yml
+      run: (cd ../.. && make embed) && golangci-lint run --config .golangci.yml

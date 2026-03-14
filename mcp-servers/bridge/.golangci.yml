@@ -18,9 +18,6 @@ linters:
     - gocritic
 
   settings:
-    gosec:
-      excludes:
-        - G204  # exec.Command — command from local config, not user input
     gocritic:
       enabled-tags:
         - diagnostic

@@ -112,7 +112,7 @@ func runCli(parent context.Context, req cliRequest) (cliResult, error) {
 	ctx, cancel := context.WithTimeout(parent, time.Duration(req.Timeout.MaxTimeoutMs)*time.Millisecond)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, req.Command, req.Args...)
+	cmd := exec.CommandContext(ctx, req.Command, req.Args...) //nolint:gosec // command and args come from local config, not user input
 	cmd.Dir = req.CWD
 	cmd.Env = os.Environ()
 	setupProc(cmd)

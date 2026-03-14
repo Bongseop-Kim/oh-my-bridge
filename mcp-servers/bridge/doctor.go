@@ -67,16 +67,15 @@ func runDoctor() {
 
 	codexPath, err := exec.LookPath("codex")
 	if err != nil {
-		failed++
-		printCheck("codex", "not found", false, err.Error())
+		// Missing CLIs are warnings — routes fall back to Claude, not a fatal error.
+		printCheck("codex", "not found (warn)", false, "routes using codex will fall back to Claude")
 	} else {
 		printCheck("codex", "found", true, fmt.Sprintf("(%s)", codexPath))
 	}
 
 	geminiPath, err := exec.LookPath("gemini")
 	if err != nil {
-		failed++
-		printCheck("gemini", "not found", false, err.Error())
+		printCheck("gemini", "not found (warn)", false, "routes using gemini will fall back to Claude")
 	} else {
 		printCheck("gemini", "found", true, fmt.Sprintf("(%s)", geminiPath))
 	}

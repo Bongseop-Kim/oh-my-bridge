@@ -40,11 +40,44 @@ fi
 if [ "$NEEDS_DOWNLOAD" = true ]; then
   mkdir -p "$INSTALL_DIR"
   # GoReleaser name_template: {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
-  URL="https://github.com/${REPO}/releases/download/v${VERSION}/oh-my-bridge_${VERSION}_${OS}_${ARCH}.tar.gz"
+  TARBALL_NAME="oh-my-bridge_${VERSION}_${OS}_${ARCH}.tar.gz"
+  URL="https://github.com/${REPO}/releases/download/v${VERSION}/${TARBALL_NAME}"
+  CHECKSUMS_URL="https://github.com/${REPO}/releases/download/v${VERSION}/oh-my-bridge_${VERSION}_checksums.txt"
   TMP=$(mktemp -d)
   trap 'rm -rf "$TMP"' EXIT
-  if ! curl -fsSL "$URL" | tar -xz -C "$TMP"; then
+
+  if ! curl -fsSL "$URL" -o "$TMP/archive.tar.gz"; then
     echo "ERROR: download failed — $URL" >&2
+    exit 1
+  fi
+  if ! curl -fsSL "$CHECKSUMS_URL" -o "$TMP/checksums.txt"; then
+    echo "ERROR: checksum file download failed — $CHECKSUMS_URL" >&2
+    exit 1
+  fi
+
+  # Verify SHA256 checksum (sha256sum on Linux, shasum on macOS)
+  if command -v sha256sum >/dev/null 2>&1; then
+    ACTUAL=$(sha256sum "$TMP/archive.tar.gz" | awk '{print $1}')
+  elif command -v shasum >/dev/null 2>&1; then
+    ACTUAL=$(shasum -a 256 "$TMP/archive.tar.gz" | awk '{print $1}')
+  else
+    echo "ERROR: neither sha256sum nor shasum found — cannot verify checksum" >&2
+    exit 1
+  fi
+  EXPECTED=$(grep "${TARBALL_NAME}" "$TMP/checksums.txt" | awk '{print $1}')
+  if [ -z "$EXPECTED" ]; then
+    echo "ERROR: no checksum entry found for ${TARBALL_NAME} in checksums.txt" >&2
+    exit 1
+  fi
+  if [ "$ACTUAL" != "$EXPECTED" ]; then
+    echo "ERROR: checksum verification failed for ${TARBALL_NAME}" >&2
+    echo "  expected: $EXPECTED" >&2
+    echo "  got:      $ACTUAL" >&2
+    exit 1
+  fi
+
+  if ! tar -xz -C "$TMP" -f "$TMP/archive.tar.gz"; then
+    echo "ERROR: extraction failed — $URL" >&2
     exit 1
   fi
   mv "$TMP/oh-my-bridge" "$BINARY"

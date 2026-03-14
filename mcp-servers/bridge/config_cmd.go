@@ -96,6 +96,15 @@ func validateConfigRules(c Config) []validationError {
 		}
 	}
 
+	if c.DefaultRoute != "" && c.DefaultRoute != "claude" {
+		if _, ok := c.Models[c.DefaultRoute]; !ok {
+			errs = append(errs, validationError{
+				Rule:    "default_route → model 존재",
+				Message: fmt.Sprintf("default_route=%q: models에 없고 'claude'도 아님", c.DefaultRoute),
+			})
+		}
+	}
+
 	for cat, co := range c.CategoryOverrides {
 		if co.ReasoningEffort != "" && !validReasoningEfforts[co.ReasoningEffort] {
 			errs = append(errs, validationError{

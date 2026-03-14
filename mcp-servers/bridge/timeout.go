@@ -25,6 +25,9 @@ func resolveTimeout(input delegateInput) (timeoutConfig, error) {
 	if tc.FirstOutputTimeoutMs > tc.MaxTimeoutMs {
 		return timeoutConfig{}, errors.New("firstOutputTimeoutMs must not exceed maxTimeoutMs")
 	}
+	// StabilityTimeoutMs is clamped rather than rejected: a value slightly
+	// above MaxTimeoutMs is likely a misconfiguration, not an error, and
+	// clamping keeps the stability check active at the ceiling.
 	if tc.StabilityTimeoutMs > tc.MaxTimeoutMs {
 		tc.StabilityTimeoutMs = tc.MaxTimeoutMs
 	}

@@ -82,7 +82,10 @@ func reloadState() error {
 func getState() (Config, map[string]bool) {
 	mu.Lock()
 	c := cfg
-	clis := availableCLIs
+	clisSnapshot := make(map[string]bool, len(availableCLIs))
+	for k, v := range availableCLIs {
+		clisSnapshot[k] = v
+	}
 	mu.Unlock()
-	return c, clis
+	return c, clisSnapshot
 }

@@ -1,4 +1,6 @@
-.PHONY: embed build test
+.PHONY: all embed build test clean
+
+all: embed build
 
 embed:
 	mkdir -p mcp-servers/bridge/embedded
@@ -11,3 +13,6 @@ build: embed
 
 test: embed
 	cd mcp-servers/bridge && go test -count=1 -race -timeout 120s ./...
+
+clean:
+	rm -rf mcp-servers/bridge/embedded mcp-servers/bridge/oh-my-bridge

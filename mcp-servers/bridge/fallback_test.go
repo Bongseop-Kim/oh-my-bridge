@@ -78,6 +78,10 @@ func TestDelegateTool_CLIError_ReturnsClaude(t *testing.T) {
 		mu.Unlock()
 	})
 
+	if err := reloadState(); err != nil {
+		t.Fatalf("reloadState: %v", err)
+	}
+
 	_, output, err := delegateTool(context.Background(), nil, delegateInput{
 		Prompt:   "test prompt",
 		Category: "quick",
@@ -153,6 +157,10 @@ func TestDelegateTool_PromptAppend_Codex(t *testing.T) {
 		mu.Unlock()
 	})
 
+	if err := reloadState(); err != nil {
+		t.Fatalf("reloadState: %v", err)
+	}
+
 	_, _, err := delegateTool(context.Background(), nil, delegateInput{
 		Prompt:   "base prompt",
 		Category: "deep",
@@ -201,6 +209,10 @@ func TestDelegateTool_PromptAppend_Gemini(t *testing.T) {
 		mu.Unlock()
 	})
 
+	if err := reloadState(); err != nil {
+		t.Fatalf("reloadState: %v", err)
+	}
+
 	_, _, err := delegateTool(context.Background(), nil, delegateInput{
 		Prompt:   "base prompt",
 		Category: "writing",
@@ -246,6 +258,10 @@ func TestDelegateTool_UnsupportedCommand_HardError(t *testing.T) {
 		availableCLIs = origCLIs
 		mu.Unlock()
 	})
+
+	if err := reloadState(); err != nil {
+		t.Fatalf("reloadState: %v", err)
+	}
 
 	_, _, err := delegateTool(context.Background(), nil, delegateInput{
 		Prompt:   "test prompt",

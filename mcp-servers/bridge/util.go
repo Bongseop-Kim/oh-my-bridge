@@ -44,7 +44,7 @@ func resolveCwd(workspaceRoot, cwd string) (string, error) {
 		return "", err
 	}
 
-	if relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) || filepath.IsAbs(relative) {
+	if relative == ".." || strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
 		return "", fmt.Errorf("cwd must stay within workspace root: %s", workspaceRoot)
 	}
 

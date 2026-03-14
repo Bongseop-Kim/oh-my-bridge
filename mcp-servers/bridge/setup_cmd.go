@@ -96,7 +96,8 @@ func installHook(hookPath, settingsPath string, hookSH []byte) error {
 				filtered = append(filtered, hRaw)
 				continue
 			}
-			if h["command"] != hookPath {
+			cmd, ok := h["command"].(string)
+			if !ok || cmd != hookPath {
 				filtered = append(filtered, hRaw)
 			}
 		}
@@ -347,9 +348,15 @@ func writeAtomicJSON(path string, v any, perm os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), perm); err != nil {
+	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	tmpName := f.Name()
+	f.Close() //nolint:errcheck
+	defer os.Remove(tmpName) //nolint:errcheck
+	if err := os.WriteFile(tmpName, append(data, '\n'), perm); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
 }

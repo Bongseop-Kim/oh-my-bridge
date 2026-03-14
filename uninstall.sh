@@ -13,19 +13,28 @@ rm -f "$HOME/.claude/hooks/subagent-code-routing.sh"
 # 3. Clean settings.json (hook entry)
 SETTINGS="$HOME/.claude/settings.json"
 HOOK_CMD="$HOME/.claude/hooks/subagent-code-routing.sh"
-if [ -f "$SETTINGS" ] && command -v jq >/dev/null 2>&1; then
-  tmp=$(mktemp)
-  if jq --arg cmd "$HOOK_CMD" '
-    if .hooks.SubagentStart then
-      .hooks.SubagentStart |= map(.hooks |= map(select(.command != $cmd)))
-      | .hooks.SubagentStart |= map(select(.hooks | length > 0))
-      | if (.hooks.SubagentStart | length) == 0 then del(.hooks.SubagentStart) else . end
-      | if (.hooks | keys | length) == 0 then del(.hooks) else . end
-    else . end
-  ' "$SETTINGS" > "$tmp" 2>/dev/null; then
-    mv "$tmp" "$SETTINGS"
+if [ -f "$SETTINGS" ]; then
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "WARNING: 'jq' not found — skipping settings.json cleanup." >&2
+    echo "  The hook entry for $HOOK_CMD may remain in $SETTINGS." >&2
+    echo "  Remove it manually or install jq and re-run this script." >&2
   else
-    rm -f "$tmp"
+    tmp=$(mktemp)
+    if jq --arg cmd "$HOOK_CMD" '
+      if .hooks.SubagentStart then
+        .hooks.SubagentStart |= map(.hooks |= map(select(.command != $cmd)))
+        | .hooks.SubagentStart |= map(select(.hooks | length > 0))
+        | if (.hooks.SubagentStart | length) == 0 then del(.hooks.SubagentStart) else . end
+        | if (.hooks | keys | length) == 0 then del(.hooks) else . end
+      else . end
+    ' "$SETTINGS" > "$tmp" 2>/dev/null; then
+      mv "$tmp" "$SETTINGS"
+    else
+      rm -f "$tmp"
+      echo "WARNING: failed to update $SETTINGS (jq error)." >&2
+      echo "  The hook entry for $HOOK_CMD may remain." >&2
+      echo "  Remove it manually from $SETTINGS." >&2
+    fi
   fi
 fi
 

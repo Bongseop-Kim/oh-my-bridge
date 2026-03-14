@@ -73,25 +73,31 @@ func TestEnsureConfig_MergeExisting(t *testing.T) {
 
 func TestLoadConfig_AutoCreate(t *testing.T) {
 	dir := t.TempDir()
-	configPath := filepath.Join(dir, "config.json")
+	t.Setenv("HOME", dir)
 
-	// Config does not exist yet — ensureConfig should create it (same logic as loadConfig auto-create).
-	if err := ensureConfig(configPath); err != nil {
-		t.Fatalf("ensureConfig: %v", err)
+	// Config does not exist yet — loadConfig should auto-create it via ensureConfig.
+	c, err := loadConfig()
+	if err != nil {
+		t.Fatalf("loadConfig: %v", err)
 	}
 
+	// Also verify the file was written to the expected path.
+	configPath := filepath.Join(dir, ".config", "oh-my-bridge", "config.json")
 	data, err := os.ReadFile(configPath) //nolint:gosec
 	if err != nil {
-		t.Fatalf("ReadFile after ensureConfig: %v", err)
+		t.Fatalf("ReadFile after loadConfig: %v", err)
 	}
-	var c Config
-	if err := json.Unmarshal(data, &c); err != nil {
+	var cFromFile Config
+	if err := json.Unmarshal(data, &cFromFile); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 
 	for _, cat := range defaultCategories {
 		if _, ok := c.Routes[cat]; !ok {
 			t.Errorf("auto-created config missing default route for category %q", cat)
+		}
+		if _, ok := cFromFile.Routes[cat]; !ok {
+			t.Errorf("config file missing default route for category %q", cat)
 		}
 	}
 	if len(c.Models) < 7 {
