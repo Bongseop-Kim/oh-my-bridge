@@ -55,27 +55,21 @@ func TestDelegateTool_CLIError_ReturnsClaude(t *testing.T) {
 	// Put a fake "codex" that exits 1 first in PATH so exec.LookPath finds it.
 	makeFakeCodex(t, 1)
 
-	// Point HOME to an empty dir so reloadState uses stale config.
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	t.Setenv("OH_MY_BRIDGE_WORKSPACE_ROOT", t.TempDir())
 
-	mu.Lock()
-	origCfg := cfg
-	origCLIs := availableCLIs
-	cfg = Config{
+	testCfg := Config{
 		Routes: map[string]string{"quick": "fake-model"},
 		Models: map[string]ModelDef{
 			"fake-model": {Command: "codex", Args: []string{}},
 		},
 	}
-	availableCLIs = map[string]bool{"codex": true}
-	mu.Unlock()
-	t.Cleanup(func() {
-		mu.Lock()
-		cfg = origCfg
-		availableCLIs = origCLIs
-		mu.Unlock()
-	})
+	writeTestConfig(t, home, testCfg)
+	saveAndRestoreState(t)
+	if err := reloadState(); err != nil {
+		t.Fatalf("reloadState: %v", err)
+	}
 
 	_, output, err := delegateTool(context.Background(), nil, delegateInput{
 		Prompt:   "test prompt",
@@ -99,7 +93,7 @@ func makeArgsCaptureFakeCodex(t *testing.T, argsFile string) {
 	dir := t.TempDir()
 	scriptPath := filepath.Join(dir, "codex")
 	content := fmt.Sprintf("#!/bin/sh\necho \"$*\" > %s\necho done\n", argsFile)
-	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil {
+	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil { //nolint:gosec
 		t.Fatalf("makeArgsCaptureFakeCodex: %v", err)
 	}
 	origPath := os.Getenv("PATH")
@@ -113,7 +107,7 @@ func makeArgsCaptureFakeGemini(t *testing.T, argsFile string) {
 	dir := t.TempDir()
 	scriptPath := filepath.Join(dir, "gemini")
 	content := fmt.Sprintf("#!/bin/sh\necho \"$*\" > %s\necho '{\"response\": \"done\"}'\n", argsFile)
-	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil {
+	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil { //nolint:gosec
 		t.Fatalf("makeArgsCaptureFakeGemini: %v", err)
 	}
 	origPath := os.Getenv("PATH")
@@ -126,13 +120,11 @@ func TestDelegateTool_PromptAppend_Codex(t *testing.T) {
 	argsFile := filepath.Join(t.TempDir(), "codex-args.txt")
 	makeArgsCaptureFakeCodex(t, argsFile)
 
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	t.Setenv("OH_MY_BRIDGE_WORKSPACE_ROOT", t.TempDir())
 
-	mu.Lock()
-	origCfg := cfg
-	origCLIs := availableCLIs
-	cfg = Config{
+	testCfg := Config{
 		Routes: map[string]string{"deep": "gpt-codex"},
 		Models: map[string]ModelDef{
 			"gpt-codex": {Command: "codex", Args: []string{}},
@@ -141,14 +133,11 @@ func TestDelegateTool_PromptAppend_Codex(t *testing.T) {
 			"deep": {PromptAppend: "APPEND_MARKER"},
 		},
 	}
-	availableCLIs = map[string]bool{"codex": true}
-	mu.Unlock()
-	t.Cleanup(func() {
-		mu.Lock()
-		cfg = origCfg
-		availableCLIs = origCLIs
-		mu.Unlock()
-	})
+	writeTestConfig(t, home, testCfg)
+	saveAndRestoreState(t)
+	if err := reloadState(); err != nil {
+		t.Fatalf("reloadState: %v", err)
+	}
 
 	_, _, err := delegateTool(context.Background(), nil, delegateInput{
 		Prompt:   "base prompt",
@@ -157,7 +146,7 @@ func TestDelegateTool_PromptAppend_Codex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	argsData, readErr := os.ReadFile(argsFile)
+	argsData, readErr := os.ReadFile(argsFile) //nolint:gosec
 	if readErr != nil {
 		t.Fatalf("failed to read args file: %v", readErr)
 	}
@@ -172,13 +161,11 @@ func TestDelegateTool_PromptAppend_Gemini(t *testing.T) {
 	argsFile := filepath.Join(t.TempDir(), "gemini-args.txt")
 	makeArgsCaptureFakeGemini(t, argsFile)
 
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	t.Setenv("OH_MY_BRIDGE_WORKSPACE_ROOT", t.TempDir())
 
-	mu.Lock()
-	origCfg := cfg
-	origCLIs := availableCLIs
-	cfg = Config{
+	testCfg := Config{
 		Routes: map[string]string{"writing": "gemini-flash"},
 		Models: map[string]ModelDef{
 			"gemini-flash": {Command: "gemini", Args: []string{}},
@@ -187,14 +174,11 @@ func TestDelegateTool_PromptAppend_Gemini(t *testing.T) {
 			"writing": {PromptAppend: "APPEND_MARKER"},
 		},
 	}
-	availableCLIs = map[string]bool{"gemini": true}
-	mu.Unlock()
-	t.Cleanup(func() {
-		mu.Lock()
-		cfg = origCfg
-		availableCLIs = origCLIs
-		mu.Unlock()
-	})
+	writeTestConfig(t, home, testCfg)
+	saveAndRestoreState(t)
+	if err := reloadState(); err != nil {
+		t.Fatalf("reloadState: %v", err)
+	}
 
 	_, _, err := delegateTool(context.Background(), nil, delegateInput{
 		Prompt:   "base prompt",
@@ -203,7 +187,7 @@ func TestDelegateTool_PromptAppend_Gemini(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	argsData, readErr := os.ReadFile(argsFile)
+	argsData, readErr := os.ReadFile(argsFile) //nolint:gosec
 	if readErr != nil {
 		t.Fatalf("failed to read args file: %v", readErr)
 	}
@@ -215,27 +199,25 @@ func TestDelegateTool_PromptAppend_Gemini(t *testing.T) {
 // TestDelegateTool_UnsupportedCommand_HardError verifies that an unsupported
 // command (not "codex" or "gemini") returns a hard error without fallback.
 func TestDelegateTool_UnsupportedCommand_HardError(t *testing.T) {
-	// Point HOME to empty dir so reloadState uses stale config.
-	t.Setenv("HOME", t.TempDir())
+	// Create a fake "not-codex-not-gemini" binary in PATH so detectCLIs marks it as available.
+	fakeBin := makeNamedExitScript(t, "not-codex-not-gemini", 0)
+	t.Setenv("PATH", filepath.Dir(fakeBin)+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	t.Setenv("OH_MY_BRIDGE_WORKSPACE_ROOT", t.TempDir())
 
-	mu.Lock()
-	origCfg := cfg
-	origCLIs := availableCLIs
-	cfg = Config{
+	testCfg := Config{
 		Routes: map[string]string{"quick": "bad-model"},
 		Models: map[string]ModelDef{
 			"bad-model": {Command: "not-codex-not-gemini", Args: []string{}},
 		},
 	}
-	availableCLIs = map[string]bool{"not-codex-not-gemini": true}
-	mu.Unlock()
-	t.Cleanup(func() {
-		mu.Lock()
-		cfg = origCfg
-		availableCLIs = origCLIs
-		mu.Unlock()
-	})
+	writeTestConfig(t, home, testCfg)
+	saveAndRestoreState(t)
+	if err := reloadState(); err != nil {
+		t.Fatalf("reloadState: %v", err)
+	}
 
 	_, _, err := delegateTool(context.Background(), nil, delegateInput{
 		Prompt:   "test prompt",

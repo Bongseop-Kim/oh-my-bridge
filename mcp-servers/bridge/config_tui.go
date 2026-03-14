@@ -251,8 +251,8 @@ func (m tuiModel) View() string {
 func (m tuiModel) viewList() string {
 	var b strings.Builder
 	b.WriteString(styleHeader.Render("oh-my-bridge config") + "\n\n")
-	b.WriteString(fmt.Sprintf("  %-22s %-22s %s\n", "Category", "Model", "CLI"))
-	b.WriteString(fmt.Sprintf("  %-22s %-22s %s\n", strings.Repeat("─", 22), strings.Repeat("─", 22), strings.Repeat("─", 12)))
+	fmt.Fprintf(&b, "  %-22s %-22s %s\n", "Category", "Model", "CLI")
+	fmt.Fprintf(&b, "  %-22s %-22s %s\n", strings.Repeat("─", 22), strings.Repeat("─", 22), strings.Repeat("─", 12))
 
 	for i, cat := range m.categories {
 		model := m.current[cat]
@@ -275,7 +275,7 @@ func (m tuiModel) viewList() string {
 func (m tuiModel) viewDropdown() string {
 	cat := m.categories[m.listCursor]
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("  %s 모델 선택:\n", cat))
+	fmt.Fprintf(&b, "  %s 모델 선택:\n", cat)
 	b.WriteString("  " + strings.Repeat("─", 30) + "\n")
 	for i, opt := range m.dropdown {
 		if i == m.cursor {

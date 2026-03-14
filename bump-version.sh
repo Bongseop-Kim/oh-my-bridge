@@ -7,8 +7,7 @@
 # Updates version in:
 #   .claude-plugin/plugin.json          (version)
 #   .claude-plugin/marketplace.json     (metadata.version + plugins[0].version)
-#   CLAUDE.md                           (캐시 경로의 버전 문자열)
-#   mcp-servers/bridge/main.go          (serverVersion)
+#   mcp-servers/bridge/types.go         (serverVersion)
 
 set -euo pipefail
 
@@ -37,8 +36,7 @@ if [[ "$CURRENT_BRANCH" != "main" ]]; then
 fi
 PLUGIN_JSON="${SCRIPT_DIR}/.claude-plugin/plugin.json"
 MARKETPLACE_JSON="${SCRIPT_DIR}/.claude-plugin/marketplace.json"
-CLAUDE_MD="${SCRIPT_DIR}/CLAUDE.md"
-MAIN_GO="${SCRIPT_DIR}/mcp-servers/bridge/main.go"
+TYPES_GO="${SCRIPT_DIR}/mcp-servers/bridge/types.go"
 
 # 현재 버전 감지
 CURRENT_VERSION=$(jq -r '.version' "$PLUGIN_JSON")
@@ -58,32 +56,26 @@ jq --arg v "$NEW_VERSION" '
   && mv "${MARKETPLACE_JSON}.tmp" "$MARKETPLACE_JSON"
 echo "  Updated: $MARKETPLACE_JSON (metadata.version + plugins[0].version)"
 
-# CLAUDE.md — 캐시 경로 버전 문자열 업데이트
-if grep -q "$CURRENT_VERSION" "$CLAUDE_MD"; then
-  sed_inplace "s/${CURRENT_VERSION}/${NEW_VERSION}/g" "$CLAUDE_MD"
-  echo "  Updated: $CLAUDE_MD"
-fi
-
-# main.go — serverVersion 업데이트
-MAIN_GO_UPDATED=false
-if grep -qE "serverVersion *= *\"${CURRENT_VERSION}\"" "$MAIN_GO"; then
-  sed_inplace "s/serverVersion *= *\"${CURRENT_VERSION}\"/serverVersion = \"${NEW_VERSION}\"/" "$MAIN_GO"
-  if grep -qE "serverVersion *= *\"${NEW_VERSION}\"" "$MAIN_GO"; then
-    echo "  Updated: $MAIN_GO (serverVersion)"
-    MAIN_GO_UPDATED=true
+# types.go — serverVersion 업데이트
+TYPES_GO_UPDATED=false
+if grep -qE "serverVersion *= *\"${CURRENT_VERSION}\"" "$TYPES_GO"; then
+  sed_inplace "s/serverVersion *= *\"${CURRENT_VERSION}\"/serverVersion = \"${NEW_VERSION}\"/" "$TYPES_GO"
+  if grep -qE "serverVersion *= *\"${NEW_VERSION}\"" "$TYPES_GO"; then
+    echo "  Updated: $TYPES_GO (serverVersion)"
+    TYPES_GO_UPDATED=true
   else
-    echo "Error: sed ran but serverVersion = \"${NEW_VERSION}\" not found in $MAIN_GO — aborting" >&2
+    echo "Error: sed ran but serverVersion = \"${NEW_VERSION}\" not found in $TYPES_GO — aborting" >&2
     exit 1
   fi
 else
-  echo "Error: serverVersion = \"${CURRENT_VERSION}\" not found in $MAIN_GO — aborting" >&2
+  echo "Error: serverVersion = \"${CURRENT_VERSION}\" not found in $TYPES_GO — aborting" >&2
   exit 1
 fi
 
 echo "  Committing and tagging v${NEW_VERSION}..."
-GIT_ADD_FILES=("${PLUGIN_JSON}" "${MARKETPLACE_JSON}" "${CLAUDE_MD}")
-if [[ "$MAIN_GO_UPDATED" == true ]]; then
-  GIT_ADD_FILES+=("${MAIN_GO}")
+GIT_ADD_FILES=("${PLUGIN_JSON}" "${MARKETPLACE_JSON}")
+if [[ "$TYPES_GO_UPDATED" == true ]]; then
+  GIT_ADD_FILES+=("${TYPES_GO}")
 fi
 git -C "$SCRIPT_DIR" add "${GIT_ADD_FILES[@]}"
 git -C "$SCRIPT_DIR" commit -m "chore: bump version to ${NEW_VERSION}"
@@ -92,5 +84,6 @@ git -C "$SCRIPT_DIR" push origin main "v${NEW_VERSION}"
 
 echo ""
 echo "Done. Next steps:"
-echo "  1. (2분 대기) Claude Code에서: /plugin update oh-my-bridge"
-echo "  2. Claude Code 재시작"
+echo "  1. (2분 대기) GitHub Actions가 릴리스 완료될 때까지 대기"
+echo "  2. curl -sSL https://raw.githubusercontent.com/Bongseop-Kim/oh-my-bridge/main/install.sh | bash"
+echo "  3. Claude Code 재시작"

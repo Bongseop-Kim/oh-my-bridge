@@ -1,12 +1,22 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
 func TestReloadState_StaleConfig_UsedWhenReloadFails(t *testing.T) {
-	// Point HOME to an empty dir so loadConfig returns an error.
-	t.Setenv("HOME", t.TempDir())
+	// Write a corrupt config so loadConfig returns a JSON parse error.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	configDir := filepath.Join(home, ".config", "oh-my-bridge")
+	if err := os.MkdirAll(configDir, 0750); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte("not json"), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
 
 	// Seed global state with valid routes+models to simulate stale config.
 	mu.Lock()
@@ -41,8 +51,16 @@ func TestReloadState_StaleConfig_UsedWhenReloadFails(t *testing.T) {
 }
 
 func TestReloadState_EmptyState_ErrorWhenReloadFails(t *testing.T) {
-	// Point HOME to an empty dir so loadConfig returns an error.
-	t.Setenv("HOME", t.TempDir())
+	// Write a corrupt config so loadConfig returns a JSON parse error.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	configDir := filepath.Join(home, ".config", "oh-my-bridge")
+	if err := os.MkdirAll(configDir, 0750); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte("not json"), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
 
 	// Empty global state — no stale config to fall back to.
 	mu.Lock()

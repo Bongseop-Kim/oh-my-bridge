@@ -144,7 +144,7 @@ func makeArgsEchoScript(t *testing.T) string {
 	scriptPath := filepath.Join(dir, "args-echo-cli")
 	// Echo all args as JSON-like response so parseGeminiJSON passes through
 	content := "#!/bin/sh\necho '{\"response\": \"'\"$*\"'\"}'\n"
-	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil {
+	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil { //nolint:gosec
 		t.Fatalf("makeArgsEchoScript: %v", err)
 	}
 	return scriptPath

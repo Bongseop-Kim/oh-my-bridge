@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: mcp-servers/bridge/go.mod
+      - name: Prepare embedded files
+        run: make embed
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.1
+          working-directory: mcp-servers/bridge
+          args: --config=.golangci.yml
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: mcp-servers/bridge/go.mod
+      - name: Prepare embedded files
+        run: make embed
+      - name: Run tests
+        working-directory: mcp-servers/bridge
+        run: go test -count=1 -race -timeout 120s ./...

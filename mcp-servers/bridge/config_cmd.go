@@ -1,10 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -94,6 +92,15 @@ func validateConfigRules(c Config) []validationError {
 			errs = append(errs, validationError{
 				Rule:    "route → model 존재",
 				Message: fmt.Sprintf("%s → %s (models에 없음)", cat, model),
+			})
+		}
+	}
+
+	if c.DefaultRoute != "" && c.DefaultRoute != "claude" {
+		if _, ok := c.Models[c.DefaultRoute]; !ok {
+			errs = append(errs, validationError{
+				Rule:    "default_route → model 존재",
+				Message: fmt.Sprintf("default_route=%q: models에 없고 'claude'도 아님", c.DefaultRoute),
 			})
 		}
 	}
@@ -189,16 +196,10 @@ func runChecksCmd() tea.Cmd {
 		var checks []checkResult
 		hasError := false
 
-		checks = append(checks, checkResult{
-			label: "routes 섹션 존재",
-			pass:  cfg.Routes != nil,
-			msg:   "routes 섹션이 없습니다",
-		})
-		checks = append(checks, checkResult{
-			label: "models 섹션 존재",
-			pass:  cfg.Models != nil,
-			msg:   "models 섹션이 없습니다",
-		})
+		checks = append(checks,
+			checkResult{label: "routes 섹션 존재", pass: cfg.Routes != nil, msg: "routes 섹션이 없습니다"},
+			checkResult{label: "models 섹션 존재", pass: cfg.Models != nil, msg: "models 섹션이 없습니다"},
+		)
 
 		missingCats := 0
 		for _, cat := range defaultCategories {
@@ -318,28 +319,11 @@ func orderedCategories(routes map[string]string) []string {
 	return append(result, extra...)
 }
 
-// configPath는 config.json 경로를 반환한다.
-func configPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".config", "oh-my-bridge", "config.json"), nil
-}
-
 // saveConfig는 config를 atomic write로 저장한다.
 func saveConfig(c Config) error {
-	path, err := configPath()
+	path, err := getConfigPath()
 	if err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), 0644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return writeAtomicJSON(path, c, 0600)
 }
