@@ -113,8 +113,14 @@ Copy the hook script and register it in `~/.claude/settings.json` so every spawn
 
 ```bash
 mkdir -p ~/.claude/hooks
-cp "${CLAUDE_PLUGIN_ROOT}/hooks/subagent-code-routing.sh" ~/.claude/hooks/subagent-code-routing.sh
-chmod +x ~/.claude/hooks/subagent-code-routing.sh
+if ! cp "${CLAUDE_PLUGIN_ROOT}/hooks/subagent-code-routing.sh" ~/.claude/hooks/subagent-code-routing.sh; then
+  echo "ERROR: failed to copy hook script" >&2
+  exit 1
+fi
+if ! chmod +x ~/.claude/hooks/subagent-code-routing.sh; then
+  echo "ERROR: failed to chmod hook script" >&2
+  exit 1
+fi
 
 SETTINGS="$HOME/.claude/settings.json"
 HOOK_CMD="$HOME/.claude/hooks/subagent-code-routing.sh"

@@ -640,7 +640,7 @@ func resolveTimeout(input delegateInput) (timeoutConfig, error) {
 		return timeoutConfig{}, errors.New("firstOutputTimeoutMs must not exceed maxTimeoutMs")
 	}
 	if cfg.StabilityTimeoutMs > cfg.MaxTimeoutMs {
-		return timeoutConfig{}, errors.New("stabilityTimeoutMs must not exceed maxTimeoutMs")
+		cfg.StabilityTimeoutMs = cfg.MaxTimeoutMs
 	}
 	return cfg, nil
 }
@@ -748,6 +748,7 @@ func runCodex(ctx context.Context, opts runOptions) (cliResult, error) {
 		Args:        args,
 		CWD:         opts.CWD,
 		Timeout:     opts.Timeout,
+		OutputFile:  outputFile,
 		ErrorPrefix: "Codex CLI",
 	})
 	if err != nil {
@@ -773,6 +774,7 @@ type cliRequest struct {
 	Args        []string
 	CWD         string
 	Timeout     timeoutConfig
+	OutputFile  string
 	ErrorPrefix string
 }
 
@@ -821,6 +823,12 @@ func runCli(parent context.Context, req cliRequest) (cliResult, error) {
 	}()
 
 	startTime := time.Now()
+	var lastFileMtime time.Time
+	if req.OutputFile != "" {
+		if fi, statErr := os.Stat(req.OutputFile); statErr == nil {
+			lastFileMtime = fi.ModTime()
+		}
+	}
 	ticker := time.NewTicker(time.Duration(stabilityPollIntervalMs) * time.Millisecond)
 	defer ticker.Stop()
 
@@ -855,6 +863,16 @@ func runCli(parent context.Context, req cliRequest) (cliResult, error) {
 				ErrTimeout, req.ErrorPrefix, req.Timeout.MaxTimeoutMs)
 
 		case <-ticker.C:
+			if req.OutputFile != "" {
+				if fi, statErr := os.Stat(req.OutputFile); statErr == nil {
+					currentMtime := fi.ModTime()
+					if currentMtime.After(lastFileMtime) {
+						_, _ = tracker.Write([]byte{1})
+						lastFileMtime = currentMtime
+					}
+				}
+			}
+
 			now := time.Now()
 			lastActivity := tracker.LastActivity()
 
