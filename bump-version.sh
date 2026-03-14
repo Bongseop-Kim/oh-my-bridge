@@ -7,7 +7,6 @@
 # Updates version in:
 #   .claude-plugin/plugin.json          (version)
 #   .claude-plugin/marketplace.json     (metadata.version + plugins[0].version)
-#   CLAUDE.md                           (캐시 경로의 버전 문자열)
 #   mcp-servers/bridge/types.go         (serverVersion)
 
 set -euo pipefail
@@ -37,7 +36,6 @@ if [[ "$CURRENT_BRANCH" != "main" ]]; then
 fi
 PLUGIN_JSON="${SCRIPT_DIR}/.claude-plugin/plugin.json"
 MARKETPLACE_JSON="${SCRIPT_DIR}/.claude-plugin/marketplace.json"
-CLAUDE_MD="${SCRIPT_DIR}/CLAUDE.md"
 TYPES_GO="${SCRIPT_DIR}/mcp-servers/bridge/types.go"
 
 # 현재 버전 감지
@@ -58,12 +56,6 @@ jq --arg v "$NEW_VERSION" '
   && mv "${MARKETPLACE_JSON}.tmp" "$MARKETPLACE_JSON"
 echo "  Updated: $MARKETPLACE_JSON (metadata.version + plugins[0].version)"
 
-# CLAUDE.md — 캐시 경로 버전 문자열 업데이트
-if grep -q "$CURRENT_VERSION" "$CLAUDE_MD"; then
-  sed_inplace "s/${CURRENT_VERSION}/${NEW_VERSION}/g" "$CLAUDE_MD"
-  echo "  Updated: $CLAUDE_MD"
-fi
-
 # types.go — serverVersion 업데이트
 TYPES_GO_UPDATED=false
 if grep -qE "serverVersion *= *\"${CURRENT_VERSION}\"" "$TYPES_GO"; then
@@ -81,7 +73,7 @@ else
 fi
 
 echo "  Committing and tagging v${NEW_VERSION}..."
-GIT_ADD_FILES=("${PLUGIN_JSON}" "${MARKETPLACE_JSON}" "${CLAUDE_MD}")
+GIT_ADD_FILES=("${PLUGIN_JSON}" "${MARKETPLACE_JSON}")
 if [[ "$TYPES_GO_UPDATED" == true ]]; then
   GIT_ADD_FILES+=("${TYPES_GO}")
 fi
