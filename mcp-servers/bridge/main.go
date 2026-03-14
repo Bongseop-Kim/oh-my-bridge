@@ -149,7 +149,7 @@ func loadConfig() (Config, error) {
 		return Config{}, fmt.Errorf("cannot determine home directory: %w", err)
 	}
 	configPath := filepath.Join(home, ".config", "oh-my-bridge", "config.json")
-	data, err := os.ReadFile(configPath)
+	data, err := os.ReadFile(configPath) //nolint:gosec
 	if err != nil {
 		if os.IsNotExist(err) {
 			return Config{}, fmt.Errorf("config not found at %s — run /oh-my-bridge:setup to create it", configPath)
@@ -297,7 +297,7 @@ func runDoctor() {
 	}
 	printCheck("binary", "v"+serverVersion, true, binaryPath)
 
-	configData, err := os.ReadFile(configPath)
+	configData, err := os.ReadFile(configPath) //nolint:gosec
 	if err != nil {
 		failed++
 		printCheck("config", "error", false, err.Error())
@@ -723,14 +723,13 @@ func runCodex(ctx context.Context, opts runOptions) (cliResult, error) {
 	if err != nil {
 		return cliResult{}, err
 	}
-	f.Close()
+	f.Close() //nolint:errcheck,gosec
 	outputFile := f.Name()
-	defer os.Remove(outputFile)
+	defer os.Remove(outputFile) //nolint:errcheck
 
 	args := make([]string, len(opts.ModelDef.Args))
 	copy(args, opts.ModelDef.Args)
-	args = append(args, "-o", outputFile)
-	args = append(args, "--skip-git-repo-check")
+	args = append(args, "-o", outputFile, "--skip-git-repo-check")
 
 	if opts.BypassApprovals {
 		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
@@ -758,7 +757,7 @@ func runCodex(ctx context.Context, opts runOptions) (cliResult, error) {
 		return result, nil
 	}
 
-	data, readErr := os.ReadFile(outputFile)
+	data, readErr := os.ReadFile(outputFile) //nolint:gosec
 	if readErr == nil {
 		if text := strings.TrimSpace(string(data)); text != "" {
 			return cliResult{Text: text, StabilityExit: result.StabilityExit}, nil
@@ -808,11 +807,11 @@ func runCli(parent context.Context, req cliRequest) (cliResult, error) {
 	readerWg.Add(2)
 	go func() {
 		defer readerWg.Done()
-		io.Copy(io.MultiWriter(&stdoutBuf, tracker), stdoutPipe) //nolint:errcheck
+		io.Copy(io.MultiWriter(&stdoutBuf, tracker), stdoutPipe) //nolint:errcheck,gosec
 	}()
 	go func() {
 		defer readerWg.Done()
-		io.Copy(io.MultiWriter(&stderrBuf, tracker), stderrPipe) //nolint:errcheck
+		io.Copy(io.MultiWriter(&stderrBuf, tracker), stderrPipe) //nolint:errcheck,gosec
 	}()
 
 	type waitResult struct{ err error }
@@ -848,7 +847,7 @@ func runCli(parent context.Context, req cliRequest) (cliResult, error) {
 						detail = strings.TrimSpace(stdoutBuf.String())
 					}
 					if detail == "" && exitErr.ProcessState != nil {
-						detail = exitErr.ProcessState.String()
+						detail = exitErr.String()
 					}
 					return cliResult{}, fmt.Errorf("%s exited with code %d: %s",
 						req.ErrorPrefix, exitErr.ExitCode(), detail)
@@ -906,17 +905,17 @@ func writeLog(entry logEntry) {
 		return
 	}
 	logDir := filepath.Join(home, ".claude", "logs")
-	if err := os.MkdirAll(logDir, 0755); err != nil {
+	if err := os.MkdirAll(logDir, 0750); err != nil {
 		fmt.Fprintf(os.Stderr, "writeLog: MkdirAll: %v\n", err)
 		return
 	}
 	logPath := filepath.Join(logDir, "oh-my-bridge.log")
-	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600) //nolint:gosec
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "writeLog: OpenFile: %v\n", err)
 		return
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	data, err := json.Marshal(entry)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "writeLog: json.Marshal: %v\n", err)

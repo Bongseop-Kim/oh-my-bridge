@@ -189,16 +189,10 @@ func runChecksCmd() tea.Cmd {
 		var checks []checkResult
 		hasError := false
 
-		checks = append(checks, checkResult{
-			label: "routes 섹션 존재",
-			pass:  cfg.Routes != nil,
-			msg:   "routes 섹션이 없습니다",
-		})
-		checks = append(checks, checkResult{
-			label: "models 섹션 존재",
-			pass:  cfg.Models != nil,
-			msg:   "models 섹션이 없습니다",
-		})
+		checks = append(checks,
+			checkResult{label: "routes 섹션 존재", pass: cfg.Routes != nil, msg: "routes 섹션이 없습니다"},
+			checkResult{label: "models 섹션 존재", pass: cfg.Models != nil, msg: "models 섹션이 없습니다"},
+		)
 
 		missingCats := 0
 		for _, cat := range defaultCategories {
@@ -338,7 +332,7 @@ func saveConfig(c Config) error {
 		return err
 	}
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), 0644); err != nil {
+	if err := os.WriteFile(tmp, append(data, '\n'), 0600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)

@@ -15,7 +15,7 @@ func makeSlowScript(t *testing.T, seconds int) string {
 	dir := t.TempDir()
 	scriptPath := filepath.Join(dir, "slow-cli")
 	content := "#!/bin/sh\nsleep " + strconv.Itoa(seconds) + "\n"
-	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil {
+	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil { //nolint:gosec
 		t.Fatalf("makeSlowScript: %v", err)
 	}
 	return scriptPath
@@ -28,7 +28,7 @@ func makeNamedExitScript(t *testing.T, name string, exitCode int) string {
 	dir := t.TempDir()
 	scriptPath := filepath.Join(dir, name)
 	content := "#!/bin/sh\nexit " + strconv.Itoa(exitCode) + "\n"
-	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil {
+	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil { //nolint:gosec
 		t.Fatalf("makeNamedExitScript: %v", err)
 	}
 	return scriptPath
@@ -53,7 +53,7 @@ func makeIncrementalOutputScript(t *testing.T, chunks int, intervalMs int, final
 		lines += fmt.Sprintf("sleep %.3f\n", float64(intervalMs)/1000.0)
 	}
 	lines += "sleep " + strconv.Itoa(finalSleepSec) + "\n"
-	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil {
+	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
 		t.Fatalf("makeIncrementalOutputScript: %v", err)
 	}
 	return scriptPath

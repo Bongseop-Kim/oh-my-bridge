@@ -99,7 +99,7 @@ func makeArgsCaptureFakeCodex(t *testing.T, argsFile string) {
 	dir := t.TempDir()
 	scriptPath := filepath.Join(dir, "codex")
 	content := fmt.Sprintf("#!/bin/sh\necho \"$*\" > %s\necho done\n", argsFile)
-	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil {
+	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil { //nolint:gosec
 		t.Fatalf("makeArgsCaptureFakeCodex: %v", err)
 	}
 	origPath := os.Getenv("PATH")
@@ -113,7 +113,7 @@ func makeArgsCaptureFakeGemini(t *testing.T, argsFile string) {
 	dir := t.TempDir()
 	scriptPath := filepath.Join(dir, "gemini")
 	content := fmt.Sprintf("#!/bin/sh\necho \"$*\" > %s\necho '{\"response\": \"done\"}'\n", argsFile)
-	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil {
+	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil { //nolint:gosec
 		t.Fatalf("makeArgsCaptureFakeGemini: %v", err)
 	}
 	origPath := os.Getenv("PATH")
@@ -157,7 +157,7 @@ func TestDelegateTool_PromptAppend_Codex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	argsData, readErr := os.ReadFile(argsFile)
+	argsData, readErr := os.ReadFile(argsFile) //nolint:gosec
 	if readErr != nil {
 		t.Fatalf("failed to read args file: %v", readErr)
 	}
@@ -203,7 +203,7 @@ func TestDelegateTool_PromptAppend_Gemini(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	argsData, readErr := os.ReadFile(argsFile)
+	argsData, readErr := os.ReadFile(argsFile) //nolint:gosec
 	if readErr != nil {
 		t.Fatalf("failed to read args file: %v", readErr)
 	}

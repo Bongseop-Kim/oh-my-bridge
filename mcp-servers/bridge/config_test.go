@@ -20,10 +20,10 @@ func writeFixtureConfig(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	dir := filepath.Join(home, ".config", "oh-my-bridge")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0755); err != nil { //nolint:gosec
 		t.Fatalf("writeFixtureConfig: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(fixtureConfig), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(fixtureConfig), 0644); err != nil { //nolint:gosec
 		t.Fatalf("writeFixtureConfig: %v", err)
 	}
 }
