@@ -15,22 +15,54 @@ Ask the user: "This will remove oh-my-bridge routing skill (code-routing) from `
 
 If the user says no, stop.
 
-2. **Remove skill**
+2. **Remove SubagentStart hook**
+
+```bash
+SETTINGS="$HOME/.claude/settings.json"
+HOOK_CMD="$HOME/.claude/hooks/subagent-code-routing.sh"
+
+rm -f "$HOOK_CMD"
+
+if [ -f "$SETTINGS" ]; then
+  tmp="$(mktemp)"
+  trap 'rm -f "$tmp"' EXIT
+  if jq --arg cmd "$HOOK_CMD" '
+    if .hooks.SubagentStart then
+      .hooks.SubagentStart |= map(
+        .hooks |= map(select(.command != $cmd))
+      ) | .hooks.SubagentStart |= map(select(.hooks | length > 0))
+      | if (.hooks.SubagentStart | length) == 0 then del(.hooks.SubagentStart) else . end
+      | if (.hooks | keys | length) == 0 then del(.hooks) else . end
+    else . end
+  ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"; then
+    echo "OK: hook removed from settings.json"
+  else
+    rm -f "$tmp"
+    echo "ERROR: failed to update $SETTINGS" >&2
+    exit 1
+  fi
+fi
+```
+
+3. **Remove skill**
 
 ```bash
 rm -rf ~/.claude/skills/oh-my-bridge
 ```
 
-3. **Verify removal**
+4. **Verify removal**
 
 ```bash
-ls ~/.claude/skills/oh-my-bridge 2>/dev/null && echo "ERROR: directory still exists" || echo "Removed successfully"
+ls ~/.claude/skills/oh-my-bridge 2>/dev/null && echo "ERROR: skill directory still exists" || echo "OK: skill directory removed"
+ls ~/.claude/hooks/subagent-code-routing.sh 2>/dev/null && echo "ERROR: hook script still exists" || echo "OK: hook script removed"
+jq -e '.hooks.SubagentStart? != null' "$HOME/.claude/settings.json" 2>/dev/null && { echo "ERROR: SubagentStart key still present in $HOME/.claude/settings.json — please remove it manually" >&2; exit 1; } || echo "OK: no settings.json or SubagentStart key absent"
 ```
 
-4. **Report to user**
+5. **Report to user**
 
 Tell the user:
 - Skill removed from `~/.claude/skills/oh-my-bridge/`
+- SubagentStart hook removed from `~/.claude/hooks/subagent-code-routing.sh` and `~/.claude/settings.json`
 - **Restart Claude Code** for the change to take effect
 - The plugin itself (MCP server Go binary) is still installed — only the routing skills were removed
 - To reinstall, run `/oh-my-bridge:setup`

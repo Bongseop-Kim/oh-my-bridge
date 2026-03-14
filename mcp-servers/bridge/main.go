@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -18,17 +19,26 @@ import (
 )
 
 const (
-	serverName           = "oh-my-bridge"
-	serverVersion = "2.4.2"
-	defaultGeminiTimeout = 120000
-	defaultCodexTimeout  = 180000
-	maxTimeoutMs         = 300000
+	serverName                  = "oh-my-bridge"
+	serverVersion               = "2.4.2"
+	defaultMaxTimeoutMs         = 1800000 // 30 minutes
+	defaultFirstOutputTimeoutMs = 30000   // 30 seconds
+	defaultStabilityTimeoutMs   = 10000   // 10 seconds
+	stabilityPollIntervalMs     = 1000    // 1 second polling interval
 )
 
 // Config is loaded from ~/.config/oh-my-bridge/config.json at startup.
 type Config struct {
-	Routes map[string]string     `json:"routes"`
-	Models map[string]ModelDef   `json:"models"`
+	Routes            map[string]string              `json:"routes"`
+	Models            map[string]ModelDef            `json:"models"`
+	DefaultRoute      string                         `json:"default_route,omitempty"`
+	CategoryOverrides map[string]CategoryOverride    `json:"category_overrides,omitempty"`
+}
+
+// CategoryOverride holds per-category settings that override ModelDef defaults.
+type CategoryOverride struct {
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	PromptAppend    string `json:"prompt_append,omitempty"`
 }
 
 // ModelDef describes how to invoke a specific model via CLI.
@@ -36,6 +46,35 @@ type ModelDef struct {
 	Command         string   `json:"command"`
 	Args            []string `json:"args"`
 	ReasoningEffort string   `json:"reasoning_effort,omitempty"`
+}
+
+// timeoutConfig holds the three-concern timeout configuration.
+type timeoutConfig struct {
+	MaxTimeoutMs         int
+	FirstOutputTimeoutMs int
+	StabilityTimeoutMs   int
+}
+
+// activityTracker records the last time any bytes were written.
+// It implements io.Writer and is used to detect output stability.
+type activityTracker struct {
+	mu           sync.Mutex
+	lastActivity time.Time
+}
+
+func (a *activityTracker) Write(p []byte) (int, error) {
+	if len(p) > 0 {
+		a.mu.Lock()
+		a.lastActivity = time.Now()
+		a.mu.Unlock()
+	}
+	return len(p), nil
+}
+
+func (a *activityTracker) LastActivity() time.Time {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.lastActivity
 }
 
 var (
@@ -46,45 +85,62 @@ var (
 
 	// ErrTimeout is returned by runCli when the context deadline is exceeded.
 	ErrTimeout = errors.New("cli timeout")
+	// ErrUnsupportedCommand indicates no runner exists for the configured command.
+	ErrUnsupportedCommand = errors.New("unsupported command")
+)
+
+// Reason constants for delegateOutput.Reason and logEntry.Reason.
+const (
+	reasonRouteConfigured  = "route_configured"
+	reasonCLINotInstalled  = "cli_not_installed"
+	reasonCLIErrorTimeout  = "cli_error_timeout"
+	reasonCLIErrorRateLimit = "cli_error_rate_limit"
+	reasonCLIErrorCrash    = "cli_error_crash"
 )
 
 type delegateInput struct {
-	Prompt          string `json:"prompt" jsonschema:"Task prompt to send to the selected model."`
-	Category        string `json:"category" jsonschema:"Task category (required): visual-engineering, ultrabrain, deep, artistry, quick, writing, unspecified-high, unspecified-low"`
-	Model           string `json:"model,omitempty" jsonschema:"Optional model override. Bypasses config route lookup."`
-	CWD             string `json:"cwd,omitempty" jsonschema:"Optional working directory, constrained to the configured workspace root."`
-	TimeoutMs       int    `json:"timeoutMs,omitempty" jsonschema:"Optional timeout in milliseconds. Maximum 300000."`
-	ReasoningEffort string `json:"reasoning_effort,omitempty" jsonschema:"Optional reasoning effort override. Overrides config default."`
-	BypassApprovals bool   `json:"bypassApprovals,omitempty" jsonschema:"If true, passes --dangerously-bypass-approvals-and-sandbox to Codex. Use only in trusted, sandboxed contexts."`
-	DryRun          bool   `json:"dryRun,omitempty" jsonschema:"If true, returns routing decision without executing the CLI."`
+	Prompt               string `json:"prompt" jsonschema:"Task prompt to send to the selected model."`
+	Category             string `json:"category" jsonschema:"Task category (required): visual-engineering, ultrabrain, deep, artistry, quick, writing, unspecified-high, unspecified-low"`
+	Model                string `json:"model,omitempty" jsonschema:"Optional model override. Bypasses config route lookup."`
+	CWD                  string `json:"cwd,omitempty" jsonschema:"Optional working directory, constrained to the configured workspace root."`
+	MaxTimeoutMs         int    `json:"maxTimeoutMs,omitempty" jsonschema:"Optional overall timeout ceiling in milliseconds. Default 1800000 (30 min)."`
+	FirstOutputTimeoutMs int    `json:"firstOutputTimeoutMs,omitempty" jsonschema:"Optional timeout for first output in milliseconds. Default 30000 (30 s)."`
+	StabilityTimeoutMs   int    `json:"stabilityTimeoutMs,omitempty" jsonschema:"Optional stability window in milliseconds. Default 10000 (10 s)."`
+	ReasoningEffort      string `json:"reasoning_effort,omitempty" jsonschema:"Optional reasoning effort override. Overrides config default."`
+	BypassApprovals      bool   `json:"bypassApprovals,omitempty" jsonschema:"If true, passes --dangerously-bypass-approvals-and-sandbox to Codex. Use only in trusted, sandboxed contexts."`
+	DryRun               bool   `json:"dryRun,omitempty" jsonschema:"If true, returns routing decision without executing the CLI."`
 }
 
 type delegateOutput struct {
-	Action    string `json:"action,omitempty" jsonschema:"'claude' when route is configured as claude or CLI not installed — handle directly."`
-	Response  string `json:"response,omitempty" jsonschema:"Model response text."`
-	CWD       string `json:"cwd,omitempty" jsonschema:"Resolved working directory used for the CLI invocation."`
-	Model     string `json:"model,omitempty" jsonschema:"Model identifier used for the CLI invocation."`
-	Category  string `json:"category,omitempty" jsonschema:"Task category used for route resolution."`
-	Provider  string `json:"provider,omitempty" jsonschema:"Resolved CLI provider name."`
-	LatencyMs int64  `json:"latency_ms,omitempty" jsonschema:"CLI execution time in milliseconds."`
-	TimedOut  bool   `json:"timed_out,omitempty" jsonschema:"True if the CLI invocation exceeded its timeout."`
-	Reason    string `json:"reason,omitempty" jsonschema:"Reason for claude action."`
+	Action        string `json:"action,omitempty" jsonschema:"'claude' when route is configured as claude or CLI not installed — handle directly."`
+	Response      string `json:"response,omitempty" jsonschema:"Model response text."`
+	CWD           string `json:"cwd,omitempty" jsonschema:"Resolved working directory used for the CLI invocation."`
+	Model         string `json:"model,omitempty" jsonschema:"Model identifier used for the CLI invocation."`
+	Category      string `json:"category,omitempty" jsonschema:"Task category used for route resolution."`
+	Provider      string `json:"provider,omitempty" jsonschema:"Resolved CLI provider name."`
+	LatencyMs     int64  `json:"latency_ms,omitempty" jsonschema:"CLI execution time in milliseconds."`
+	TimedOut      bool   `json:"timed_out,omitempty" jsonschema:"True if the CLI invocation exceeded its timeout."`
+	StabilityExit bool   `json:"stability_exit,omitempty" jsonschema:"True if the CLI was terminated by the stability timeout. Verify output files before trusting the response."`
+	Reason        string `json:"reason,omitempty" jsonschema:"Reason for claude action."`
 }
 
 type logEntry struct {
-	Timestamp string `json:"timestamp"`
-	Model     string `json:"model"`
-	Provider  string `json:"provider"`
-	Category  string `json:"category,omitempty"`
-	LatencyMs int64  `json:"latency_ms"`
-	TimedOut  bool   `json:"timed_out"`
-	Status    string `json:"status"`
-	Error     string `json:"error,omitempty"`
+	Timestamp     string `json:"timestamp"`
+	Model         string `json:"model"`
+	Provider      string `json:"provider"`
+	Category      string `json:"category,omitempty"`
+	LatencyMs     int64  `json:"latency_ms"`
+	TimedOut      bool   `json:"timed_out"`
+	StabilityExit bool   `json:"stability_exit,omitempty"`
+	Status        string `json:"status"`
+	Error         string `json:"error,omitempty"`
+	Reason        string `json:"reason,omitempty"`
 }
 
 // cliResult holds the text output from a CLI invocation.
 type cliResult struct {
-	Text string
+	Text          string
+	StabilityExit bool // true when terminated by stability timeout (output may be complete)
 }
 
 func loadConfig() (Config, error) {
@@ -129,6 +185,13 @@ func detectCLIs(c Config) map[string]bool {
 func reloadState() error {
 	cfgNew, err := loadConfig()
 	if err != nil {
+		mu.Lock()
+		hasState := cfg.Routes != nil && len(cfg.Models) > 0
+		mu.Unlock()
+		if hasState {
+			fmt.Fprintf(os.Stderr, "oh-my-bridge: config reload failed, using stale config: %v\n", err)
+			return nil
+		}
 		return err
 	}
 	clisNew := detectCLIs(cfgNew)
@@ -292,21 +355,21 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 	if strings.TrimSpace(input.Category) == "" {
 		return nil, delegateOutput{}, errors.New("category is required")
 	}
-	if input.TimeoutMs < 0 || input.TimeoutMs > maxTimeoutMs {
-		return nil, delegateOutput{}, fmt.Errorf("timeoutMs must be between 0 and %d", maxTimeoutMs)
+	timeout, err := resolveTimeout(input)
+	if err != nil {
+		return nil, delegateOutput{}, err
 	}
 
 	c, clis := getState()
-	modelName, modelDef, skip, err := resolveModel(input.Category, input.Model, c, clis)
+	modelName, modelDef, skip, skipReason, err := resolveModel(input.Category, input.Model, c, clis)
 	if err != nil {
 		return nil, delegateOutput{}, err
 	}
 	if skip {
-		reason := "Route configured as claude or CLI not installed. Handle directly."
 		out := delegateOutput{
 			Action:   "claude",
 			Category: input.Category,
-			Reason:   reason,
+			Reason:   skipReason,
 		}
 		writeLog(logEntry{
 			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
@@ -314,6 +377,7 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 			Provider:  "claude",
 			Category:  input.Category,
 			Status:    "claude",
+			Reason:    skipReason,
 		})
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -351,15 +415,10 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 		return nil, delegateOutput{}, err
 	}
 
-	timeoutMs := input.TimeoutMs
-	if timeoutMs == 0 {
-		timeoutMs = defaultTimeout(modelDef.Command)
-	}
-
-	// Per-call reasoning_effort overrides config default.
-	reasoningEffort := input.ReasoningEffort
-	if reasoningEffort == "" {
-		reasoningEffort = modelDef.ReasoningEffort
+	reasoningEffort, promptAppend := resolveCategoryOverrides(input.Category, input, modelDef, c.CategoryOverrides)
+	finalPrompt := input.Prompt
+	if promptAppend != "" {
+		finalPrompt = input.Prompt + "\n\n" + promptAppend
 	}
 
 	start := time.Now()
@@ -367,25 +426,30 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 	switch modelDef.Command {
 	case "codex":
 		result, err = runCodex(ctx, runOptions{
-			Prompt:          input.Prompt,
+			Prompt:          finalPrompt,
 			CWD:             resolvedCwd,
 			ModelDef:        modelDef,
 			ReasoningEffort: reasoningEffort,
 			BypassApprovals: input.BypassApprovals,
-			TimeoutMs:       timeoutMs,
+			Timeout:         timeout,
 		})
 	case "gemini":
 		result, err = runGemini(ctx, runOptions{
-			Prompt:    input.Prompt,
-			CWD:       resolvedCwd,
-			ModelDef:  modelDef,
-			TimeoutMs: timeoutMs,
+			Prompt:   finalPrompt,
+			CWD:      resolvedCwd,
+			ModelDef: modelDef,
+			Timeout:  timeout,
 		})
 	default:
-		err = fmt.Errorf("unsupported command %q for model %q", modelDef.Command, modelName)
+		err = fmt.Errorf("%w: %q for model %q", ErrUnsupportedCommand, modelDef.Command, modelName)
 	}
 	if err != nil {
+		if errors.Is(err, ErrUnsupportedCommand) {
+			return nil, delegateOutput{}, err
+		}
 		timedOut := errors.Is(err, ErrTimeout)
+		errMsg := err.Error()
+		errReason := classifyCliError(err)
 		writeLog(logEntry{
 			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 			Model:     modelName,
@@ -393,33 +457,50 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 			Category:  input.Category,
 			LatencyMs: time.Since(start).Milliseconds(),
 			TimedOut:  timedOut,
-			Status:    "error",
-			Error:     err.Error(),
+			Status:    "cli_error",
+			Error:     errMsg,
+			Reason:    errReason,
 		})
-		return nil, delegateOutput{}, err
+		out := delegateOutput{
+			Action:   "claude",
+			Category: input.Category,
+			Model:    modelName,
+			Provider: modelDef.Command,
+			TimedOut: timedOut,
+			Reason:   fmt.Sprintf("%s: %s", errReason, errMsg),
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{&mcp.TextContent{Text: toJSONOrEmpty(out)}},
+		}, out, nil
+	}
+
+	responseText := result.Text
+	if result.StabilityExit {
+		responseText = "[WARNING: stability-exit — output may be incomplete, verify generated files]\n\n" + responseText
 	}
 
 	output := delegateOutput{
-		Response:  result.Text,
-		CWD:       resolvedCwd,
-		Model:     modelName,
-		Category:  input.Category,
-		Provider:  modelDef.Command,
-		LatencyMs: time.Since(start).Milliseconds(),
-		TimedOut:  false,
+		Response:      responseText,
+		CWD:           resolvedCwd,
+		Model:         modelName,
+		Category:      input.Category,
+		Provider:      modelDef.Command,
+		LatencyMs:     time.Since(start).Milliseconds(),
+		StabilityExit: result.StabilityExit,
 	}
 	writeLog(logEntry{
-		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
-		Model:     modelName,
-		Provider:  modelDef.Command,
-		Category:  input.Category,
-		LatencyMs: output.LatencyMs,
-		Status:    "success",
+		Timestamp:     time.Now().UTC().Format(time.RFC3339Nano),
+		Model:         modelName,
+		Provider:      modelDef.Command,
+		Category:      input.Category,
+		LatencyMs:     output.LatencyMs,
+		StabilityExit: result.StabilityExit,
+		Status:        "success",
 	})
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
-			&mcp.TextContent{Text: result.Text},
+			&mcp.TextContent{Text: responseText},
 		},
 	}, output, nil
 }
@@ -427,11 +508,12 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 type statusInput struct{}
 
 type statusOutput struct {
-	Version    string                `json:"version"`
-	Routes     map[string]string     `json:"routes"`
-	Models     map[string]ModelDef   `json:"models"`
-	CLIStatus  map[string]bool       `json:"cli_status"`
-	ConfigPath string                `json:"config_path"`
+	Version           string                         `json:"version"`
+	Routes            map[string]string              `json:"routes"`
+	Models            map[string]ModelDef            `json:"models"`
+	CLIStatus         map[string]bool                `json:"cli_status"`
+	ConfigPath        string                         `json:"config_path"`
+	CategoryOverrides map[string]CategoryOverride    `json:"category_overrides,omitempty"`
 }
 
 func statusTool(ctx context.Context, _ *mcp.CallToolRequest, _ statusInput) (*mcp.CallToolResult, statusOutput, error) {
@@ -446,11 +528,12 @@ func statusTool(ctx context.Context, _ *mcp.CallToolRequest, _ statusInput) (*mc
 	configPath := filepath.Join(home, ".config", "oh-my-bridge", "config.json")
 	c, clis := getState()
 	out := statusOutput{
-		Version:    serverVersion,
-		Routes:     c.Routes,
-		Models:     c.Models,
-		CLIStatus:  clis,
-		ConfigPath: configPath,
+		Version:           serverVersion,
+		Routes:            c.Routes,
+		Models:            c.Models,
+		CLIStatus:         clis,
+		ConfigPath:        configPath,
+		CategoryOverrides: c.CategoryOverrides,
 	}
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
@@ -461,34 +544,67 @@ func statusTool(ctx context.Context, _ *mcp.CallToolRequest, _ statusInput) (*mc
 
 // resolveModel returns the model name, its definition, and whether Claude should handle directly.
 // If modelOverride is set, it bypasses config route lookup.
-func resolveModel(category, modelOverride string, c Config, clis map[string]bool) (modelName string, def ModelDef, skip bool, err error) {
+func resolveModel(category, modelOverride string, c Config, clis map[string]bool) (modelName string, def ModelDef, skip bool, reason string, err error) {
 	if modelOverride != "" {
 		d, ok := c.Models[modelOverride]
 		if !ok {
-			return "", ModelDef{}, false, fmt.Errorf("model override %q not found in config", modelOverride)
+			return "", ModelDef{}, false, "", fmt.Errorf("model override %q not found in config", modelOverride)
 		}
 		if !clis[d.Command] {
-			return modelOverride, d, true, nil
+			return modelOverride, d, true, reasonCLINotInstalled, nil
 		}
-		return modelOverride, d, false, nil
+		return modelOverride, d, false, "", nil
 	}
 
 	routeVal, ok := c.Routes[category]
 	if !ok {
-		return "", ModelDef{}, false, fmt.Errorf("category %q not found in config routes", category)
+		if c.DefaultRoute != "" {
+			routeVal = c.DefaultRoute
+		} else {
+			return "", ModelDef{}, false, "", fmt.Errorf("category %q not found in config routes", category)
+		}
 	}
 	if routeVal == "claude" {
-		return "claude", ModelDef{}, true, nil
+		return "claude", ModelDef{}, true, reasonRouteConfigured, nil
 	}
 
 	d, ok := c.Models[routeVal]
 	if !ok {
-		return "", ModelDef{}, false, fmt.Errorf("model %q (from route for category %q) not found in config models", routeVal, category)
+		return "", ModelDef{}, false, "", fmt.Errorf("model %q (from route for category %q) not found in config models", routeVal, category)
 	}
 	if !clis[d.Command] {
-		return routeVal, d, true, nil
+		return routeVal, d, true, reasonCLINotInstalled, nil
 	}
-	return routeVal, d, false, nil
+	return routeVal, d, false, "", nil
+}
+
+// resolveCategoryOverrides returns the effective reasoningEffort and promptAppend
+// for a given category. Priority: per-call input > category_overrides > ModelDef default.
+func resolveCategoryOverrides(category string, input delegateInput, modelDef ModelDef, overrides map[string]CategoryOverride) (reasoningEffort, promptAppend string) {
+	reasoningEffort = modelDef.ReasoningEffort
+	if co, ok := overrides[category]; ok {
+		if co.ReasoningEffort != "" {
+			reasoningEffort = co.ReasoningEffort
+		}
+		promptAppend = co.PromptAppend
+	}
+	if input.ReasoningEffort != "" {
+		reasoningEffort = input.ReasoningEffort
+	}
+	return
+}
+
+func classifyCliError(err error) string {
+	if errors.Is(err, ErrTimeout) {
+		return reasonCLIErrorTimeout
+	}
+	lower := strings.ToLower(err.Error())
+	if strings.Contains(lower, "rate limit") ||
+		strings.Contains(lower, "429") ||
+		strings.Contains(lower, "too many requests") {
+		return reasonCLIErrorRateLimit
+	}
+	return reasonCLIErrorCrash
 }
 
 type runOptions struct {
@@ -497,14 +613,36 @@ type runOptions struct {
 	ModelDef        ModelDef
 	ReasoningEffort string
 	BypassApprovals bool
-	TimeoutMs       int
+	Timeout         timeoutConfig
 }
 
-func defaultTimeout(command string) int {
-	if command == "gemini" {
-		return defaultGeminiTimeout
+// resolveTimeout builds a timeoutConfig from delegateInput, applying defaults
+// for zero values and validating constraints.
+func resolveTimeout(input delegateInput) (timeoutConfig, error) {
+	if input.MaxTimeoutMs < 0 || input.FirstOutputTimeoutMs < 0 || input.StabilityTimeoutMs < 0 {
+		return timeoutConfig{}, errors.New("timeout values must be non-negative")
 	}
-	return defaultCodexTimeout
+	cfg := timeoutConfig{
+		MaxTimeoutMs:         defaultMaxTimeoutMs,
+		FirstOutputTimeoutMs: defaultFirstOutputTimeoutMs,
+		StabilityTimeoutMs:   defaultStabilityTimeoutMs,
+	}
+	if input.MaxTimeoutMs != 0 {
+		cfg.MaxTimeoutMs = input.MaxTimeoutMs
+	}
+	if input.FirstOutputTimeoutMs != 0 {
+		cfg.FirstOutputTimeoutMs = input.FirstOutputTimeoutMs
+	}
+	if input.StabilityTimeoutMs != 0 {
+		cfg.StabilityTimeoutMs = input.StabilityTimeoutMs
+	}
+	if cfg.FirstOutputTimeoutMs > cfg.MaxTimeoutMs {
+		return timeoutConfig{}, errors.New("firstOutputTimeoutMs must not exceed maxTimeoutMs")
+	}
+	if cfg.StabilityTimeoutMs > cfg.MaxTimeoutMs {
+		cfg.StabilityTimeoutMs = cfg.MaxTimeoutMs
+	}
+	return cfg, nil
 }
 
 func getWorkspaceRoot() (string, error) {
@@ -542,21 +680,40 @@ func resolveCwd(workspaceRoot, cwd string) (string, error) {
 	return target, nil
 }
 
-// runGemini invokes the Gemini CLI. The --yolo flag enables YOLO approval mode,
-// which auto-approves tool calls (shell commands, file ops) while keeping the
-// sandbox active.
+// parseGeminiJSON extracts the "response" field from Gemini --output-format json output.
+// Falls back to raw text if parsing fails or the field is empty.
+func parseGeminiJSON(raw string) string {
+	var resp struct {
+		Response string `json:"response"`
+	}
+	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
+		return raw
+	}
+	if resp.Response != "" {
+		return resp.Response
+	}
+	return raw
+}
+
+// runGemini invokes the Gemini CLI with --approval-mode=yolo (auto-approves tool calls)
+// and --output-format json (structured output).
 func runGemini(ctx context.Context, opts runOptions) (cliResult, error) {
 	args := make([]string, len(opts.ModelDef.Args))
 	copy(args, opts.ModelDef.Args)
-	args = append(args, "-p", opts.Prompt, "--yolo")
+	args = append(args, "-p", opts.Prompt, "--approval-mode=yolo", "--output-format", "json")
 
-	return runCli(ctx, cliRequest{
+	result, err := runCli(ctx, cliRequest{
 		Command:     opts.ModelDef.Command,
 		Args:        args,
 		CWD:         opts.CWD,
-		TimeoutMs:   opts.TimeoutMs,
+		Timeout:     opts.Timeout,
 		ErrorPrefix: "Gemini CLI",
 	})
+	if err != nil {
+		return cliResult{}, err
+	}
+	result.Text = parseGeminiJSON(result.Text)
+	return result, nil
 }
 
 func runCodex(ctx context.Context, opts runOptions) (cliResult, error) {
@@ -573,6 +730,7 @@ func runCodex(ctx context.Context, opts runOptions) (cliResult, error) {
 	args := make([]string, len(opts.ModelDef.Args))
 	copy(args, opts.ModelDef.Args)
 	args = append(args, "-o", outputFile)
+	args = append(args, "--skip-git-repo-check")
 
 	if opts.BypassApprovals {
 		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
@@ -589,7 +747,8 @@ func runCodex(ctx context.Context, opts runOptions) (cliResult, error) {
 		Command:     opts.ModelDef.Command,
 		Args:        args,
 		CWD:         opts.CWD,
-		TimeoutMs:   opts.TimeoutMs,
+		Timeout:     opts.Timeout,
+		OutputFile:  outputFile,
 		ErrorPrefix: "Codex CLI",
 	})
 	if err != nil {
@@ -602,55 +761,140 @@ func runCodex(ctx context.Context, opts runOptions) (cliResult, error) {
 	data, readErr := os.ReadFile(outputFile)
 	if readErr == nil {
 		if text := strings.TrimSpace(string(data)); text != "" {
-			return cliResult{Text: text}, nil
+			return cliResult{Text: text, StabilityExit: result.StabilityExit}, nil
 		}
 	}
 
 	log.Printf("runCodex: no output from stdout or output file %s; returning (done)", outputFile)
-	return cliResult{Text: "(done)"}, nil
+	return cliResult{Text: "(done)", StabilityExit: result.StabilityExit}, nil
 }
 
 type cliRequest struct {
 	Command     string
 	Args        []string
 	CWD         string
-	TimeoutMs   int
+	Timeout     timeoutConfig
+	OutputFile  string
 	ErrorPrefix string
 }
 
 func runCli(parent context.Context, req cliRequest) (cliResult, error) {
-	ctx, cancel := context.WithTimeout(parent, time.Duration(req.TimeoutMs)*time.Millisecond)
+	ctx, cancel := context.WithTimeout(parent, time.Duration(req.Timeout.MaxTimeoutMs)*time.Millisecond)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, req.Command, req.Args...)
 	cmd.Dir = req.CWD
 	cmd.Env = os.Environ()
+	setupProc(cmd)
+	cmd.WaitDelay = 2 * time.Second
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return cliResult{}, fmt.Errorf("%w: %s timed out after %dms", ErrTimeout, req.ErrorPrefix, req.TimeoutMs)
-	}
+	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			detail := strings.TrimSpace(stderr.String())
-			if detail == "" {
-				detail = strings.TrimSpace(stdout.String())
-			}
-			if detail == "" && exitErr.ProcessState != nil {
-				detail = exitErr.ProcessState.String()
-			}
-			return cliResult{}, fmt.Errorf("%s exited with code %d: %s", req.ErrorPrefix, exitErr.ExitCode(), detail)
-		}
-		return cliResult{}, err
+		return cliResult{}, fmt.Errorf("%s: stdout pipe: %w", req.ErrorPrefix, err)
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return cliResult{}, fmt.Errorf("%s: stderr pipe: %w", req.ErrorPrefix, err)
 	}
 
-	return cliResult{Text: strings.TrimSpace(stdout.String())}, nil
+	var stdoutBuf, stderrBuf bytes.Buffer
+	tracker := &activityTracker{}
+
+	if err := cmd.Start(); err != nil {
+		return cliResult{}, fmt.Errorf("%s: start: %w", req.ErrorPrefix, err)
+	}
+
+	var readerWg sync.WaitGroup
+	readerWg.Add(2)
+	go func() {
+		defer readerWg.Done()
+		io.Copy(io.MultiWriter(&stdoutBuf, tracker), stdoutPipe) //nolint:errcheck
+	}()
+	go func() {
+		defer readerWg.Done()
+		io.Copy(io.MultiWriter(&stderrBuf, tracker), stderrPipe) //nolint:errcheck
+	}()
+
+	type waitResult struct{ err error }
+	waitCh := make(chan waitResult, 1)
+	go func() {
+		readerWg.Wait()
+		waitCh <- waitResult{err: cmd.Wait()}
+	}()
+
+	startTime := time.Now()
+	var lastFileMtime time.Time
+	if req.OutputFile != "" {
+		if fi, statErr := os.Stat(req.OutputFile); statErr == nil {
+			lastFileMtime = fi.ModTime()
+		}
+	}
+	ticker := time.NewTicker(time.Duration(stabilityPollIntervalMs) * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case res := <-waitCh:
+			if res.err != nil {
+				// Check if context was cancelled (max timeout)
+				if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+					return cliResult{}, fmt.Errorf("%w: %s timed out after %dms",
+						ErrTimeout, req.ErrorPrefix, req.Timeout.MaxTimeoutMs)
+				}
+				var exitErr *exec.ExitError
+				if errors.As(res.err, &exitErr) {
+					detail := strings.TrimSpace(stderrBuf.String())
+					if detail == "" {
+						detail = strings.TrimSpace(stdoutBuf.String())
+					}
+					if detail == "" && exitErr.ProcessState != nil {
+						detail = exitErr.ProcessState.String()
+					}
+					return cliResult{}, fmt.Errorf("%s exited with code %d: %s",
+						req.ErrorPrefix, exitErr.ExitCode(), detail)
+				}
+				return cliResult{}, res.err
+			}
+			return cliResult{Text: strings.TrimSpace(stdoutBuf.String())}, nil
+
+		case <-ctx.Done():
+			<-waitCh
+			return cliResult{}, fmt.Errorf("%w: %s timed out after %dms",
+				ErrTimeout, req.ErrorPrefix, req.Timeout.MaxTimeoutMs)
+
+		case <-ticker.C:
+			if req.OutputFile != "" {
+				if fi, statErr := os.Stat(req.OutputFile); statErr == nil {
+					currentMtime := fi.ModTime()
+					if currentMtime.After(lastFileMtime) {
+						_, _ = tracker.Write([]byte{1})
+						lastFileMtime = currentMtime
+					}
+				}
+			}
+
+			now := time.Now()
+			lastActivity := tracker.LastActivity()
+
+			if lastActivity.IsZero() {
+				if now.Sub(startTime) > time.Duration(req.Timeout.FirstOutputTimeoutMs)*time.Millisecond {
+					cancel()
+					<-waitCh
+					return cliResult{}, fmt.Errorf("%w: %s first-output timeout after %dms",
+						ErrTimeout, req.ErrorPrefix, req.Timeout.FirstOutputTimeoutMs)
+				}
+			} else {
+				if now.Sub(lastActivity) > time.Duration(req.Timeout.StabilityTimeoutMs)*time.Millisecond {
+					cancel()
+					<-waitCh
+					return cliResult{
+						Text:          strings.TrimSpace(stdoutBuf.String()),
+						StabilityExit: true,
+					}, nil
+				}
+			}
+		}
+	}
 }
 
 func writeLog(entry logEntry) {
