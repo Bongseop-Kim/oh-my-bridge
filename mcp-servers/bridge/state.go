@@ -23,9 +23,18 @@ func loadConfig() (Config, error) {
 	data, err := os.ReadFile(configPath) //nolint:gosec
 	if err != nil {
 		if os.IsNotExist(err) {
-			return Config{}, fmt.Errorf("config not found at %s — run /oh-my-bridge:setup to create it", configPath)
+			// Auto-create default config on first run.
+			if err := ensureConfig(configPath); err != nil {
+				return Config{}, fmt.Errorf("auto-creating default config: %w", err)
+			}
+			fmt.Fprintf(os.Stderr, "oh-my-bridge: created default config at %s\n", configPath)
+			data, err = os.ReadFile(configPath) //nolint:gosec
+			if err != nil {
+				return Config{}, fmt.Errorf("reading auto-created config: %w", err)
+			}
+		} else {
+			return Config{}, fmt.Errorf("reading config: %w", err)
 		}
-		return Config{}, fmt.Errorf("reading config: %w", err)
 	}
 	var cfgNew Config
 	if err := json.Unmarshal(data, &cfgNew); err != nil {

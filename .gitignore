@@ -5,6 +5,7 @@ mcp-servers/**/node_modules/
 mcp-servers/**/dist/
 mcp-servers/**/*.js.map
 mcp-servers/bridge/oh-my-bridge
+mcp-servers/bridge/embedded/
 
 superpowers/
 mcp-servers/bridge/bridge

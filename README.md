@@ -4,7 +4,7 @@
 
 **각 모델의 강점을 라우팅한다.**
 
-Claude Code에서 작업을 분류하고, 적합한 모델에 위임하는 브리지 플러그인.
+Claude Code에서 작업을 분류하고, 적합한 모델에 위임하는 브리지 MCP 서버.
 
 [![GitHub Release](https://img.shields.io/github/v/release/Bongseop-Kim/oh-my-bridge?color=369eff&labelColor=black&logo=github&style=flat-square)](https://github.com/Bongseop-Kim/oh-my-bridge/releases)
 [![License](https://img.shields.io/badge/license-MIT-white?labelColor=black&style=flat-square)](./LICENSE)
@@ -102,23 +102,22 @@ codex --version   # 설치 확인
 gemini --version
 ```
 
-### Phase 1 — 플러그인 설치
+### 원라인 설치
 
 ```bash
-/plugin install /path/to/oh-my-bridge
+curl -sSL https://raw.githubusercontent.com/Bongseop-Kim/oh-my-bridge/main/install.sh | bash
 ```
 
-자동으로 처리됨:
+한 번에 처리됨:
 
-- `~/.claude.json` — bridge MCP 서버 등록
+1. 최신 바이너리 다운로드 → `~/.local/bin/oh-my-bridge`
+2. `claude mcp add bridge --scope user` — MCP 서버 등록
+3. `oh-my-bridge install-skills` — Skill, hook, config 설치
 
-### Phase 2 — Skill 설치
+Claude Code를 재시작하면 `code-routing` Skill이 자동 적용된다.
 
-```text
-/oh-my-bridge:setup
-```
-
-Claude Code를 재시작하면 `code-routing` Skill이 자동 적용된다 (model routing 포함).
+> `~/.local/bin`이 PATH에 없는 경우 설치 후 안내 메시지가 출력된다:
+> `export PATH="$HOME/.local/bin:$PATH"` 를 쉘 프로파일에 추가한다.
 
 ---
 
@@ -126,19 +125,23 @@ Claude Code를 재시작하면 `code-routing` Skill이 자동 적용된다 (mode
 
 ### MCP 연결
 
+```bash
+claude mcp list          # bridge 항목 확인
+```
+
+또는 Claude Code 내에서:
+
 ```text
 /mcp
 ```
 
-아래 항목 `✔ connected` 확인:
-
-- `bridge`
+`bridge · ✔ connected` 확인.
 
 ### Skill 설치
 
 ```bash
-ls ~/.claude/skills/oh-my-bridge/
-# code-routing.md
+head -3 ~/.claude/skills/oh-my-bridge/SKILL.md
+# name: oh-my-bridge:code-routing
 ```
 
 ### E2E 테스트
@@ -204,21 +207,13 @@ oh-my-bridge config validate
 
 ## 업데이트
 
-### 플러그인 파일 업데이트 (skills, commands)
+설치 명령을 다시 실행하면 된다. 이미 최신 버전이면 아무 작업도 하지 않는다.
 
-```text
-/plugin update oh-my-bridge
+```bash
+curl -sSL https://raw.githubusercontent.com/Bongseop-Kim/oh-my-bridge/main/install.sh | bash
 ```
 
-### 바이너리 포함 전체 업데이트
-
-`/plugin update`는 플러그인 파일만 갱신한다. Go 바이너리는 업데이트되지 않으므로 아래를 추가로 실행해야 한다.
-
-```text
-/oh-my-bridge:setup
-```
-
-setup은 설치된 바이너리 버전과 플러그인 버전을 비교해 다를 때만 다운로드한다.
+바이너리, MCP 등록, Skills, config 모두 멱등적으로 갱신된다.
 
 ---
 
@@ -286,22 +281,25 @@ gemini       found      ✔  (/usr/local/bin/gemini)
 
 ```text
 oh-my-bridge/
-├── .claude-plugin/
+├── install.sh               원라인 설치 스크립트
+├── uninstall.sh             제거 스크립트 (--all 플래그로 완전 제거)
+├── .claude-plugin/          플러그인 메타데이터 (기존 사용자 호환용)
 │   ├── marketplace.json
 │   └── plugin.json
-├── .goreleaser.yml           GoReleaser 릴리즈 자동화
+├── .goreleaser.yml          GoReleaser 릴리즈 자동화
 ├── .github/workflows/
-│   └── release.yml          태그 push 시 바이너리 빌드 + 배포
+│   └── release.yml         태그 push 시 바이너리 빌드 + 배포
 ├── mcp-servers/
-│   └── bridge/              Go MCP 서버 (정적 바이너리)
+│   └── bridge/             Go MCP 서버 (정적 바이너리)
 │       ├── main.go
+│       ├── setup_cmd.go    install-skills 서브커맨드
+│       ├── state.go        loadConfig (config 없으면 자동 생성)
 │       ├── go.mod
 │       └── go.sum
 ├── commands/
-│   ├── setup.md             /oh-my-bridge:setup
-│   └── uninstall.md         /oh-my-bridge:uninstall
+│   └── status.md           /oh-my-bridge:status
 ├── skills/
-│   └── code-routing.md      위임 여부 판단 + 카테고리 분류 + config 라우트 기반 단일 모델 선택
+│   └── code-routing.md     위임 여부 판단 + 카테고리 분류 + config 라우트 기반 단일 모델 선택
 └── bump-version.sh
 ```
 
@@ -310,29 +308,36 @@ oh-my-bridge/
 ## 개발
 
 ```bash
-# 로컬 바이너리 빌드 (개발자용, Go 필요)
-cd mcp-servers/bridge && CGO_ENABLED=0 go build -o oh-my-bridge .
+# 로컬 바이너리 빌드 (Go 필요)
+make build   # embed + go build
 
-# 버전 업데이트 + 릴리즈 (commit + tag + push → GitHub Actions 자동 빌드)
+# 테스트
+make test
+
+# 버전 업데이트 + 릴리즈
 ./bump-version.sh <new-version>
-
-# 캐시 직접 동기화 (skill 파일만, 급할 때)
-cp skills/code-routing.md ~/.claude/plugins/cache/oh-my-bridge/oh-my-bridge/$(cat .claude-plugin/plugin.json | jq -r .version)/skills/code-routing.md
+# 자동으로: types.go + plugin.json + marketplace.json + CLAUDE.md 버전 갱신
+# commit + tag → main 머지 후 태그 push하면 GitHub Actions가 릴리즈 생성
 
 # 재배포 순서
 # 1. ./bump-version.sh <version>   ← commit + local tag 자동 포함
 # 2. git push origin <branch> → PR → main 머지
 # 3. git push origin v<version>    ← GitHub Actions 트리거
-# 4. (2분 대기) /plugin update oh-my-bridge
-# 5. Claude Code 재시작
+# 4. (2분 대기) GitHub Actions 릴리즈 완료 대기
+# 5. curl -sSL https://raw.githubusercontent.com/Bongseop-Kim/oh-my-bridge/main/install.sh | bash
+# 6. Claude Code 재시작
 ```
 
 ---
 
 ## 제거
 
-```text
-/oh-my-bridge:uninstall
+```bash
+# Skills + hooks + MCP 제거 (바이너리·config 유지)
+bash <(curl -sSL https://raw.githubusercontent.com/Bongseop-Kim/oh-my-bridge/main/uninstall.sh)
+
+# 완전 제거 (바이너리 + config 포함)
+bash <(curl -sSL https://raw.githubusercontent.com/Bongseop-Kim/oh-my-bridge/main/uninstall.sh) --all
 ```
 
-Skill 파일 제거 후 Claude Code를 재시작하면 플러그인이 비활성화된다.
+제거 후 Claude Code를 재시작하면 비활성화된다.

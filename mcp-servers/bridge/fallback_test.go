@@ -55,20 +55,21 @@ func TestDelegateTool_CLIError_ReturnsClaude(t *testing.T) {
 	// Put a fake "codex" that exits 1 first in PATH so exec.LookPath finds it.
 	makeFakeCodex(t, 1)
 
-	// Point HOME to an empty dir so reloadState uses stale config.
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	t.Setenv("OH_MY_BRIDGE_WORKSPACE_ROOT", t.TempDir())
 
-	mu.Lock()
-	origCfg := cfg
-	origCLIs := availableCLIs
-	cfg = Config{
+	testCfg := Config{
 		Routes: map[string]string{"quick": "fake-model"},
 		Models: map[string]ModelDef{
 			"fake-model": {Command: "codex", Args: []string{}},
 		},
 	}
-	availableCLIs = map[string]bool{"codex": true}
+	writeTestConfig(t, home, testCfg)
+
+	mu.Lock()
+	origCfg := cfg
+	origCLIs := availableCLIs
 	mu.Unlock()
 	t.Cleanup(func() {
 		mu.Lock()
@@ -126,13 +127,11 @@ func TestDelegateTool_PromptAppend_Codex(t *testing.T) {
 	argsFile := filepath.Join(t.TempDir(), "codex-args.txt")
 	makeArgsCaptureFakeCodex(t, argsFile)
 
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	t.Setenv("OH_MY_BRIDGE_WORKSPACE_ROOT", t.TempDir())
 
-	mu.Lock()
-	origCfg := cfg
-	origCLIs := availableCLIs
-	cfg = Config{
+	testCfg := Config{
 		Routes: map[string]string{"deep": "gpt-codex"},
 		Models: map[string]ModelDef{
 			"gpt-codex": {Command: "codex", Args: []string{}},
@@ -141,7 +140,11 @@ func TestDelegateTool_PromptAppend_Codex(t *testing.T) {
 			"deep": {PromptAppend: "APPEND_MARKER"},
 		},
 	}
-	availableCLIs = map[string]bool{"codex": true}
+	writeTestConfig(t, home, testCfg)
+
+	mu.Lock()
+	origCfg := cfg
+	origCLIs := availableCLIs
 	mu.Unlock()
 	t.Cleanup(func() {
 		mu.Lock()
@@ -172,13 +175,11 @@ func TestDelegateTool_PromptAppend_Gemini(t *testing.T) {
 	argsFile := filepath.Join(t.TempDir(), "gemini-args.txt")
 	makeArgsCaptureFakeGemini(t, argsFile)
 
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	t.Setenv("OH_MY_BRIDGE_WORKSPACE_ROOT", t.TempDir())
 
-	mu.Lock()
-	origCfg := cfg
-	origCLIs := availableCLIs
-	cfg = Config{
+	testCfg := Config{
 		Routes: map[string]string{"writing": "gemini-flash"},
 		Models: map[string]ModelDef{
 			"gemini-flash": {Command: "gemini", Args: []string{}},
@@ -187,7 +188,11 @@ func TestDelegateTool_PromptAppend_Gemini(t *testing.T) {
 			"writing": {PromptAppend: "APPEND_MARKER"},
 		},
 	}
-	availableCLIs = map[string]bool{"gemini": true}
+	writeTestConfig(t, home, testCfg)
+
+	mu.Lock()
+	origCfg := cfg
+	origCLIs := availableCLIs
 	mu.Unlock()
 	t.Cleanup(func() {
 		mu.Lock()
@@ -215,20 +220,25 @@ func TestDelegateTool_PromptAppend_Gemini(t *testing.T) {
 // TestDelegateTool_UnsupportedCommand_HardError verifies that an unsupported
 // command (not "codex" or "gemini") returns a hard error without fallback.
 func TestDelegateTool_UnsupportedCommand_HardError(t *testing.T) {
-	// Point HOME to empty dir so reloadState uses stale config.
-	t.Setenv("HOME", t.TempDir())
+	// Create a fake "not-codex-not-gemini" binary in PATH so detectCLIs marks it as available.
+	fakeBin := makeNamedExitScript(t, "not-codex-not-gemini", 0)
+	t.Setenv("PATH", filepath.Dir(fakeBin)+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	t.Setenv("OH_MY_BRIDGE_WORKSPACE_ROOT", t.TempDir())
 
-	mu.Lock()
-	origCfg := cfg
-	origCLIs := availableCLIs
-	cfg = Config{
+	testCfg := Config{
 		Routes: map[string]string{"quick": "bad-model"},
 		Models: map[string]ModelDef{
 			"bad-model": {Command: "not-codex-not-gemini", Args: []string{}},
 		},
 	}
-	availableCLIs = map[string]bool{"not-codex-not-gemini": true}
+	writeTestConfig(t, home, testCfg)
+
+	mu.Lock()
+	origCfg := cfg
+	origCLIs := availableCLIs
 	mu.Unlock()
 	t.Cleanup(func() {
 		mu.Lock()

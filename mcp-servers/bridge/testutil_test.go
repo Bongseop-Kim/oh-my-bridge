@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -38,6 +39,23 @@ func makeNamedExitScript(t *testing.T, name string, exitCode int) string {
 // Useful for testing non-hang failure modes (immediate CLI error return).
 func makeFastExitScript(t *testing.T, exitCode int) string {
 	return makeNamedExitScript(t, "fake-cli", exitCode)
+}
+
+// writeTestConfig writes c as JSON to the config path under home so that
+// reloadState() loads it correctly during tests that set HOME to a temp dir.
+func writeTestConfig(t *testing.T, home string, c Config) {
+	t.Helper()
+	configDir := filepath.Join(home, ".config", "oh-my-bridge")
+	if err := os.MkdirAll(configDir, 0750); err != nil {
+		t.Fatalf("writeTestConfig MkdirAll: %v", err)
+	}
+	data, err := json.Marshal(c)
+	if err != nil {
+		t.Fatalf("writeTestConfig Marshal: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), data, 0600); err != nil {
+		t.Fatalf("writeTestConfig WriteFile: %v", err)
+	}
 }
 
 // makeIncrementalOutputScript creates a script that emits `chunks` lines at

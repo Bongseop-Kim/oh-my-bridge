@@ -26,6 +26,14 @@ func main() {
 		fmt.Println(serverVersion)
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "install-skills" {
+		runInstallSkills()
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "setup" {
+		runSetup()
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "doctor" {
 		runDoctor()
 		return
