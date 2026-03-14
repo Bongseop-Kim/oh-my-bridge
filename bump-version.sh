@@ -59,7 +59,7 @@ echo "  Updated: $MARKETPLACE_JSON (metadata.version + plugins[0].version)"
 # types.go — serverVersion 업데이트
 TYPES_GO_UPDATED=false
 if grep -qE "serverVersion *= *\"${CURRENT_VERSION}\"" "$TYPES_GO"; then
-  sed_inplace "s/serverVersion *= *\"${CURRENT_VERSION}\"/serverVersion = \"${NEW_VERSION}\"/" "$TYPES_GO"
+  sed_inplace "s/serverVersion\( *\)= *\"${CURRENT_VERSION}\"/serverVersion\1= \"${NEW_VERSION}\"/" "$TYPES_GO"
   if grep -qE "serverVersion *= *\"${NEW_VERSION}\"" "$TYPES_GO"; then
     echo "  Updated: $TYPES_GO (serverVersion)"
     TYPES_GO_UPDATED=true

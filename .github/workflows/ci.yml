@@ -17,6 +17,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: mcp-servers/bridge/go.mod
+          cache-dependency-path: mcp-servers/bridge/go.sum
       - name: Prepare embedded files
         run: make embed
       - uses: golangci/golangci-lint-action@v8
@@ -32,6 +33,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: mcp-servers/bridge/go.mod
+          cache-dependency-path: mcp-servers/bridge/go.sum
       - name: Prepare embedded files
         run: make embed
       - name: Run tests
