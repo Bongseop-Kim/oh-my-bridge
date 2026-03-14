@@ -80,11 +80,13 @@ Gemini는 UI를 잘 만들고, Claude는 판단을 잘한다. oh-my-bridge는
 
 | 모델             | 성격             | 강점                                           |
 | ---------------- | ---------------- | ---------------------------------------------- |
-| **Claude**       | Mechanics-driven | 오케스트레이션, 간단한 편집                    |
-| **Codex (GPT)**  | Principle-driven | 로직 중심 코드, 리팩토링, 복잡한 비즈니스 로직 |
-| **Gemini Pro**   | Vision-driven    | UI/UX, 비주얼 컴포넌트, 디자인 시스템          |
-| **Gemini Flash** | Speed-driven     | 문서, 보일러플레이트, 빠른 처리                |
-| **GPT-5.4**      | Balanced         | 카테고리 불분명한 고임팩트 작업                |
+| **Claude**            | Mechanics-driven | 오케스트레이션, 간단한 편집                    |
+| **Codex (GPT)**       | Principle-driven | 로직 중심 코드, 리팩토링, 복잡한 비즈니스 로직 |
+| **Gemini Pro**        | Vision-driven    | UI/UX, 비주얼 컴포넌트, 디자인 시스템          |
+| **Gemini Flash**      | Speed-driven     | 문서, 보일러플레이트, 빠른 처리                |
+| **GPT-5.4**           | Balanced         | 카테고리 불분명한 고임팩트 작업                |
+| **Gemini 2.5 Pro**    | Vision-driven    | UI/UX, 비주얼 컴포넌트 (안정 버전)            |
+| **Gemini 2.5 Flash**  | Speed-driven     | 문서, 보일러플레이트 (안정 버전)               |
 
 MCP 서버는 Go 정적 바이너리 하나(`bridge`)로 위의 모든 외부 모델을 커버한다. `config.json`의 라우트만 바꾸면 즉시 반영된다.
 
@@ -201,6 +203,18 @@ oh-my-bridge config validate
 
 각 카테고리 옆에 **CLI 상태** (`● codex ✔` / `✗ codex 없음` / `─ built-in`)가 표시되어 설치 여부를 즉시 확인할 수 있다. 저장은 atomic write(`.tmp` → rename)로 처리된다.
 
+### default_route 설정
+
+`routes`에 없는 category 요청이 들어올 때 fallback할 기본 route를 지정할 수 있다. TUI에서는 설정 불가 — `config.json`을 직접 수정한다:
+
+```json
+{
+  "default_route": "unspecified-low"
+}
+```
+
+미지정 시 알 수 없는 category에 대해 hard error를 반환한다.
+
 ![oh-my-bridge config TUI](docs/config.png)
 
 ---
@@ -266,7 +280,7 @@ oh-my-bridge doctor
 ```text
 oh-my-bridge doctor
 ───────────────────────────────────────
-binary       v2.4.0     ✔
+binary       v2.4.3     ✔
 config       ok         ✔  (~/.config/oh-my-bridge/config.json)
 skill        installed  ✔
 codex        found      ✔  (/usr/local/bin/codex)
@@ -288,18 +302,33 @@ oh-my-bridge/
 │   └── plugin.json
 ├── .goreleaser.yml          GoReleaser 릴리즈 자동화
 ├── .github/workflows/
+│   ├── ci.yml              PR마다 lint + test 자동 실행
 │   └── release.yml         태그 push 시 바이너리 빌드 + 배포
 ├── mcp-servers/
 │   └── bridge/             Go MCP 서버 (정적 바이너리)
 │       ├── main.go
 │       ├── setup_cmd.go    install-skills 서브커맨드
 │       ├── state.go        loadConfig (config 없으면 자동 생성)
+│       ├── routing.go      위임 로직 및 라우팅
+│       ├── runner.go       CLI 실행 래퍼
+│       ├── types.go        타입 및 상수 정의
+│       ├── tools.go        MCP 툴 등록
+│       ├── config_cmd.go   config 서브커맨드 (list, validate)
+│       ├── config_tui.go   TUI 에디터
+│       ├── doctor.go       doctor 서브커맨드
+│       ├── stats_cmd.go    stats 서브커맨드
+│       ├── timeout.go      타임아웃 유틸리티
+│       ├── util.go         공통 유틸리티
 │       ├── go.mod
 │       └── go.sum
 ├── commands/
-│   └── status.md           /oh-my-bridge:status
+│   ├── status.md               /oh-my-bridge:status
+│   └── subagent-code-routing.sh  서브에이전트 라우팅 훅 스크립트
+├── hooks/                   Claude Code 훅 스크립트
+├── tests/                   E2E 테스트
 ├── skills/
-│   └── code-routing.md     위임 여부 판단 + 카테고리 분류 + config 라우트 기반 단일 모델 선택
+│   ├── code-routing-full.md    메인 세션용 — 위임 판단, 카테고리 분류, 모델 선택, 오류 처리
+│   └── code-routing-slim.md    서브에이전트용 — 위임 판단과 카테고리 목록만 포함
 └── bump-version.sh
 ```
 
