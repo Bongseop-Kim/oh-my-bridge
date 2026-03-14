@@ -352,11 +352,16 @@ func writeAtomicJSON(path string, v any, perm os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	tmpName := f.Name()
-	f.Close() //nolint:errcheck
-	defer os.Remove(tmpName) //nolint:errcheck
-	if err := os.WriteFile(tmpName, append(data, '\n'), perm); err != nil {
+	defer os.Remove(f.Name()) //nolint:errcheck
+	if _, err := f.Write(append(data, '\n')); err != nil {
+		f.Close() //nolint:errcheck
 		return err
 	}
-	return os.Rename(tmpName, path)
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(f.Name(), perm); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), path)
 }

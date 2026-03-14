@@ -66,18 +66,7 @@ func TestDelegateTool_CLIError_ReturnsClaude(t *testing.T) {
 		},
 	}
 	writeTestConfig(t, home, testCfg)
-
-	mu.Lock()
-	origCfg := cfg
-	origCLIs := availableCLIs
-	mu.Unlock()
-	t.Cleanup(func() {
-		mu.Lock()
-		cfg = origCfg
-		availableCLIs = origCLIs
-		mu.Unlock()
-	})
-
+	saveAndRestoreState(t)
 	if err := reloadState(); err != nil {
 		t.Fatalf("reloadState: %v", err)
 	}
@@ -145,18 +134,7 @@ func TestDelegateTool_PromptAppend_Codex(t *testing.T) {
 		},
 	}
 	writeTestConfig(t, home, testCfg)
-
-	mu.Lock()
-	origCfg := cfg
-	origCLIs := availableCLIs
-	mu.Unlock()
-	t.Cleanup(func() {
-		mu.Lock()
-		cfg = origCfg
-		availableCLIs = origCLIs
-		mu.Unlock()
-	})
-
+	saveAndRestoreState(t)
 	if err := reloadState(); err != nil {
 		t.Fatalf("reloadState: %v", err)
 	}
@@ -197,18 +175,7 @@ func TestDelegateTool_PromptAppend_Gemini(t *testing.T) {
 		},
 	}
 	writeTestConfig(t, home, testCfg)
-
-	mu.Lock()
-	origCfg := cfg
-	origCLIs := availableCLIs
-	mu.Unlock()
-	t.Cleanup(func() {
-		mu.Lock()
-		cfg = origCfg
-		availableCLIs = origCLIs
-		mu.Unlock()
-	})
-
+	saveAndRestoreState(t)
 	if err := reloadState(); err != nil {
 		t.Fatalf("reloadState: %v", err)
 	}
@@ -247,18 +214,7 @@ func TestDelegateTool_UnsupportedCommand_HardError(t *testing.T) {
 		},
 	}
 	writeTestConfig(t, home, testCfg)
-
-	mu.Lock()
-	origCfg := cfg
-	origCLIs := availableCLIs
-	mu.Unlock()
-	t.Cleanup(func() {
-		mu.Lock()
-		cfg = origCfg
-		availableCLIs = origCLIs
-		mu.Unlock()
-	})
-
+	saveAndRestoreState(t)
 	if err := reloadState(); err != nil {
 		t.Fatalf("reloadState: %v", err)
 	}

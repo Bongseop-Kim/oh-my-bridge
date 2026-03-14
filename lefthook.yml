@@ -1,6 +1,10 @@
 pre-commit:
-  parallel: true
+  piped: true
   commands:
+    embed:
+      glob: "{skills/**,hooks/**,mcp-servers/bridge/**/*.go}"
+      root: .
+      run: make embed
     gofmt-check:
       glob: "**/*.go"
       root: mcp-servers/bridge
@@ -8,8 +12,8 @@ pre-commit:
     go-vet:
       glob: "**/*.go"
       root: mcp-servers/bridge
-      run: (cd ../.. && make embed) && go vet ./...
+      run: go vet ./...
     golangci-lint:
       glob: "**/*.go"
       root: mcp-servers/bridge
-      run: (cd ../.. && make embed) && golangci-lint run --config .golangci.yml
+      run: golangci-lint run --config .golangci.yml

@@ -41,6 +41,23 @@ func makeFastExitScript(t *testing.T, exitCode int) string {
 	return makeNamedExitScript(t, "fake-cli", exitCode)
 }
 
+// saveAndRestoreState saves the current global cfg and availableCLIs and
+// registers a cleanup to restore them. Call before writeTestConfig+reloadState
+// in any test that mutates global state.
+func saveAndRestoreState(t *testing.T) {
+	t.Helper()
+	mu.Lock()
+	origCfg := cfg
+	origCLIs := availableCLIs
+	mu.Unlock()
+	t.Cleanup(func() {
+		mu.Lock()
+		cfg = origCfg
+		availableCLIs = origCLIs
+		mu.Unlock()
+	})
+}
+
 // writeTestConfig writes c as JSON to the config path under home so that
 // reloadState() loads it correctly during tests that set HOME to a temp dir.
 func writeTestConfig(t *testing.T, home string, c Config) {
