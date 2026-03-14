@@ -354,7 +354,7 @@ func writeAtomicJSON(path string, v any, perm os.FileMode) error {
 	}
 	defer os.Remove(f.Name()) //nolint:errcheck
 	if _, err := f.Write(append(data, '\n')); err != nil {
-		f.Close() //nolint:errcheck
+		_ = f.Close() //nolint:gosec
 		return err
 	}
 	if err := f.Close(); err != nil {

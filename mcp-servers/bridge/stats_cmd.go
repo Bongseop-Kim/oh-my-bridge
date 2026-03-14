@@ -33,7 +33,6 @@ func runStats() {
 		fmt.Fprintf(os.Stderr, "stats: %v\n", err)
 		os.Exit(1)
 	}
-	defer f.Close() //nolint:errcheck
 
 	todayDate := time.Now().UTC().Format("2006-01-02")
 
@@ -87,7 +86,12 @@ func runStats() {
 	}
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintf(os.Stderr, "stats: reading log: %v\n", err)
+		f.Close() //nolint:errcheck,gosec
 		os.Exit(1)
+	}
+
+	if err := f.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "stats: closing log: %v\n", err)
 	}
 
 	if len(order) == 0 {
