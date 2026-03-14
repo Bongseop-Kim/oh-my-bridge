@@ -209,11 +209,11 @@ oh-my-bridge config validate
 
 ```json
 {
-  "default_route": "unspecified-low"
+  "default_route": "claude"
 }
 ```
 
-미지정 시 알 수 없는 category에 대해 hard error를 반환한다.
+`default_route` 값은 `routes` 키가 아닌 `models` 키(또는 `"claude"`)여야 한다. 예를 들어 `"claude"`, `"gpt-5.4"`, `"gemini-2.5-pro"` 등이 유효한 값이다. 미지정 시 알 수 없는 category에 대해 hard error를 반환한다.
 
 ![oh-my-bridge config TUI](docs/config.png)
 

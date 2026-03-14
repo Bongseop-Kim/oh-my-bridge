@@ -89,7 +89,7 @@ const (
 
 type delegateInput struct {
 	Prompt               string `json:"prompt" jsonschema:"Task prompt to send to the selected model."`
-	Category             string `json:"category" jsonschema:"Task routing key; must match a key in Config.Routes (e.g. deep, quick, writing — see config for full list)."`
+	Category             string `json:"category" jsonschema:"Task routing key; must match a key in Config.Routes (e.g. deep, quick, writing — see config for full list). Unknown categories are accepted when Config.DefaultRoute is set — the default_route value is used as the fallback model key."`
 	Model                string `json:"model,omitempty" jsonschema:"Optional model override. Bypasses config route lookup."`
 	CWD                  string `json:"cwd,omitempty" jsonschema:"Optional working directory, constrained to the configured workspace root."`
 	MaxTimeoutMs         int    `json:"maxTimeoutMs,omitempty" jsonschema:"Optional overall timeout ceiling in milliseconds. Default 1800000 (30 min)."`

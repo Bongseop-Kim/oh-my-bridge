@@ -17,7 +17,7 @@ else
   VERSION=$(echo "$API_RESPONSE" | grep '"tag_name"' | sed 's/.*"v\([^"]*\)".*/\1/')
 fi
 
-if [ -z "$VERSION" ]; then
+if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
   echo "ERROR: failed to detect latest version" >&2
   exit 1
 fi

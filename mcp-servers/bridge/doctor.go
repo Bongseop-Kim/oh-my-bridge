@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 func runDoctor() {
@@ -21,14 +22,20 @@ func runDoctor() {
 		os.Exit(1)
 	}
 	skillPath := filepath.Join(home, ".claude", "skills", "oh-my-bridge", "SKILL.md")
+	slimPath := filepath.Join(home, ".claude", "skills", "oh-my-bridge", "code-routing-slim.md")
 	failed := 0
 
 	printCheck := func(name, status string, ok bool, detail string) {
-		mark := "✘"
-		if ok {
+		var mark string
+		switch {
+		case ok:
 			mark = "✔"
+		case strings.Contains(strings.ToLower(status), "warn"):
+			mark = "⚠"
+		default:
+			mark = "✘"
 		}
-		line := fmt.Sprintf("%-12s %-10s %s", name, status, mark)
+		line := fmt.Sprintf("%-22s %-16s %s", name, status, mark)
 		if detail != "" {
 			line = fmt.Sprintf("%s  %s", line, detail)
 		}
@@ -49,12 +56,24 @@ func runDoctor() {
 		failed++
 		printCheck("config", "error", false, err.Error())
 	} else {
-		var configRaw map[string]any
-		if err := json.Unmarshal(configData, &configRaw); err != nil {
+		var c Config
+		if err := json.Unmarshal(configData, &c); err != nil {
 			failed++
 			printCheck("config", "error", false, err.Error())
 		} else {
-			printCheck("config", "ok", true, fmt.Sprintf("(%s)", configPath))
+			errs := validateConfigRules(c)
+			hardErrors := 0
+			for _, e := range errs {
+				if !e.Warn {
+					hardErrors++
+				}
+			}
+			if hardErrors > 0 {
+				failed++
+				printCheck("config", "invalid", false, fmt.Sprintf("(%s)", configPath))
+			} else {
+				printCheck("config", "ok", true, fmt.Sprintf("(%s)", configPath))
+			}
 		}
 	}
 
@@ -63,6 +82,13 @@ func runDoctor() {
 		printCheck("skill", "not found", false, skillPath)
 	} else {
 		printCheck("skill", "installed", true, "")
+	}
+
+	if _, err := os.Stat(slimPath); err != nil {
+		failed++
+		printCheck("code-routing-slim", "not found", false, slimPath)
+	} else {
+		printCheck("code-routing-slim", "installed", true, "")
 	}
 
 	codexPath, err := exec.LookPath("codex")
