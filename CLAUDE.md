@@ -1,6 +1,6 @@
 # oh-my-bridge — CLAUDE.md
 
-Claude가 코드 생성 작업을 자율 판단하여 적합한 AI 모델(Codex/Gemini)에 위임하는 skill 기반 브리지 플러그인 (v2.4.2).
+Claude가 코드 생성 작업을 자율 판단하여 적합한 AI 모델(Codex/Gemini)에 위임하는 skill 기반 브리지 플러그인 (v2.4.3).
 
 ## 작업 관점 기준 (CRITICAL)
 

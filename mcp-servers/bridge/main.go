@@ -20,7 +20,7 @@ import (
 
 const (
 	serverName                  = "oh-my-bridge"
-	serverVersion               = "2.4.2"
+	serverVersion = "2.4.3"
 	defaultMaxTimeoutMs         = 1800000 // 30 minutes
 	defaultFirstOutputTimeoutMs = 30000   // 30 seconds
 	defaultStabilityTimeoutMs   = 10000   // 10 seconds
