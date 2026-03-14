@@ -1,30 +1,33 @@
+version: "2"
+
 run:
   timeout: 3m
+
+formatters:
+  enable:
+    - gofmt
 
 linters:
   enable:
     - errcheck
     - govet
     - staticcheck
-    - gosimple
     - ineffassign
     - unused
     - gosec
     - gocritic
-    - gofmt
 
-linters-settings:
-  gosec:
-    excludes:
-      - G204  # exec.Command — command from local config, not user input
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - performance
-    disabled-checks:
-      - hugeParam
+  settings:
+    gosec:
+      excludes:
+        - G204  # exec.Command — command from local config, not user input
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+      disabled-checks:
+        - hugeParam
 
 issues:
-  exclude-use-default: false
   max-issues-per-linter: 0
   max-same-issues: 0

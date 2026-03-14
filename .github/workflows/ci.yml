@@ -17,11 +17,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: mcp-servers/bridge/go.mod
-      - uses: golangci/golangci-lint-action@v6
+      - uses: golangci/golangci-lint-action@v8
         with:
-          version: v1.64.8
+          version: v2.1
           working-directory: mcp-servers/bridge
-          args: --config .golangci.yml
+          args: --config=.golangci.yml
 
   test:
     runs-on: ubuntu-latest
