@@ -75,8 +75,61 @@ cold start 차이(800ms vs 3ms)는 세션 시작 시 1회 발생하므로 체감
 
 ---
 
-## 5. 참고
+## 5. CLI vs MCP 설계 검토 (2026.03)
+
+현재 bridge는 외부 모델을 **CLI로 호출**한다. MCP로 전환하는 방안을 검토했고, 그 결과를 기록한다.
+
+### 현재 구조
+
+```text
+Claude Code
+  └── bridge MCP (Go 바이너리)
+        └── codex --full-auto  (CLI exec)
+        └── gemini --yolo      (CLI exec)
+```
+
+### MCP 전환 시 구조
+
+Codex는 `codex-mcp-server`를 공식 제공한다. Gemini는 커뮤니티 MCP 서버가 있으며 내부적으로 CLI를 subprocess로 호출한다.
+
+```text
+Claude Code
+  └── bridge MCP (Go 바이너리)
+        └── codex-mcp-server  (JSON-RPC)
+        └── gemini-mcp-server (JSON-RPC → CLI subprocess)
+```
+
+### 항목별 비교
+
+| 항목             | CLI                            | MCP                                | 우위                     |
+| ---------------- | ------------------------------ | ---------------------------------- | ------------------------ |
+| 장시간 작업 제어 | 블로킹, kill만 가능            | 스트리밍, cancel, 부분 결과 수신   | MCP                      |
+| 컨텍스트 전달    | 문자열 한 방                   | 구조화된 스키마                    | MCP (단, 토큰 비용 증가) |
+| 에러 처리        | exit code + stderr 파싱        | JSON-RPC 타입별 에러 코드          | MCP                      |
+| 멀티턴           | 불가 (매 호출 새 프로세스)     | threadId로 세션 연속               | MCP                      |
+| 권한 제어        | 플래그 한 개                   | approval_policy, sandbox 세밀 제어 | MCP                      |
+| CLI 변경 추적    | 봉섭님이 직접 추적             | 모델사가 MCP 서버 유지             | MCP                      |
+| 토큰 효율        | TES 202 (벤치마크)             | TES 152, 최대 236x 증가 위험       | CLI                      |
+| 보안             | 단순, injection 방어 직접 구현 | 공격 성공률 23~41% 증폭 위험       | CLI                      |
+| 설정·디버깅      | 터미널에서 즉시 재현 가능      | JSON-RPC 페이로드 디버깅 필요      | CLI                      |
+
+### 결론
+
+**MCP 전환의 핵심 이점은 두 가지다.** 모델사가 CLI 변경을 흡수하므로 bridge 유지보수 부담이 줄고, threadId 기반 멀티턴 위임이 가능해진다.
+
+**반면 CLI가 우위인 항목도 명확하다.** 토큰 효율(33% 우위), 보안(MCP 아키텍처 자체의 공격 증폭 특성), 디버깅 단순성.
+
+현재 oh-my-bridge의 사용 패턴(단발성 코드 생성 위임)에서는 멀티턴 이점이 크지 않다. CLI 변경 추적 부담이 실질적으로 느껴지는 시점에 전환을 재검토한다.
+
+---
+
+## 6. 참고
 
 - [MCP Architecture — Model Context Protocol](https://modelcontextprotocol.io/docs/learn/architecture)
 - [MCP Lifecycle Specification](https://modelcontextprotocol.io/specification/latest/basic/lifecycle)
 - [Claude Code MCP docs](https://code.claude.com/docs/en/mcp.md)
+- Mario Zechner, [MCP vs CLI: Benchmarking Tools for Coding Agents](https://mariozechner.at/posts/2025-08-15-mcp-vs-cli/) (2025.08) — 120회 실험, 성공률 동일, 토큰 효율 CLI 33% 우위
+- arXiv 2508.12566 — MCP 컨텍스트 통합 시 입력 토큰 최대 236.5x 증가
+- arXiv 2601.17549 — MCP 아키텍처가 공격 성공률 23~41% 증폭
+- arXiv 2602.14878 — MCP tool description 품질이 성공률에 직접 영향
+- [Codex MCP Server 공식 문서](https://developers.openai.com/codex/guides/agents-sdk/)
