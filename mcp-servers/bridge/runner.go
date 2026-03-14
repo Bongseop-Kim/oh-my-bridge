@@ -15,6 +15,13 @@ import (
 	"time"
 )
 
+// copyArgs returns a copy of the base args slice so callers can safely append without mutating ModelDef.Args.
+func copyArgs(base []string) []string {
+	result := make([]string, len(base))
+	copy(result, base)
+	return result
+}
+
 // parseGeminiJSON extracts the "response" field from Gemini --output-format json output.
 // Falls back to raw text if parsing fails or the field is empty.
 func parseGeminiJSON(raw string) string {
@@ -33,8 +40,7 @@ func parseGeminiJSON(raw string) string {
 // runGemini invokes the Gemini CLI with --approval-mode=yolo (auto-approves tool calls)
 // and --output-format json (structured output).
 func runGemini(ctx context.Context, opts runOptions) (cliResult, error) {
-	args := make([]string, len(opts.ModelDef.Args))
-	copy(args, opts.ModelDef.Args)
+	args := copyArgs(opts.ModelDef.Args)
 	args = append(args, "-p", opts.Prompt, "--approval-mode=yolo", "--output-format", "json")
 
 	result, err := runCli(ctx, cliRequest{
@@ -62,8 +68,7 @@ func runCodex(ctx context.Context, opts runOptions) (cliResult, error) {
 	outputFile := f.Name()
 	defer os.Remove(outputFile) //nolint:errcheck
 
-	args := make([]string, len(opts.ModelDef.Args))
-	copy(args, opts.ModelDef.Args)
+	args := copyArgs(opts.ModelDef.Args)
 	args = append(args, "-o", outputFile, "--skip-git-repo-check")
 
 	if opts.BypassApprovals {

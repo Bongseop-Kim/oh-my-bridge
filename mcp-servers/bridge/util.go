@@ -8,6 +8,14 @@ import (
 	"strings"
 )
 
+func getConfigPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", "oh-my-bridge", "config.json"), nil
+}
+
 func getWorkspaceRoot() (string, error) {
 	root := os.Getenv("OH_MY_BRIDGE_WORKSPACE_ROOT")
 	if strings.TrimSpace(root) == "" {

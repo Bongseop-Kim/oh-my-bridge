@@ -72,6 +72,12 @@ var (
 	ErrUnsupportedCommand = errors.New("unsupported command")
 )
 
+// CLI command name constants used for model dispatch.
+const (
+	cmdCodex  = "codex"
+	cmdGemini = "gemini"
+)
+
 // Reason constants for delegateOutput.Reason and logEntry.Reason.
 const (
 	reasonRouteConfigured   = "route_configured"

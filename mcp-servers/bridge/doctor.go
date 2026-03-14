@@ -15,7 +15,11 @@ func runDoctor() {
 		os.Exit(1)
 	}
 
-	configPath := filepath.Join(home, ".config", "oh-my-bridge", "config.json")
+	configPath, err := getConfigPath()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "oh-my-bridge: cannot determine config path: %v\n", err)
+		os.Exit(1)
+	}
 	skillPath := filepath.Join(home, ".claude", "skills", "oh-my-bridge", "SKILL.md")
 	failed := 0
 

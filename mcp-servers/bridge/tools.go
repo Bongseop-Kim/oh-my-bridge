@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -92,7 +90,7 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 	start := time.Now()
 	var result cliResult
 	switch modelDef.Command {
-	case "codex":
+	case cmdCodex:
 		result, err = runCodex(ctx, runOptions{
 			Prompt:          finalPrompt,
 			CWD:             resolvedCwd,
@@ -101,7 +99,7 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 			BypassApprovals: input.BypassApprovals,
 			Timeout:         timeout,
 		})
-	case "gemini":
+	case cmdGemini:
 		result, err = runGemini(ctx, runOptions{
 			Prompt:   finalPrompt,
 			CWD:      resolvedCwd,
@@ -178,11 +176,10 @@ func statusTool(ctx context.Context, _ *mcp.CallToolRequest, _ statusInput) (*mc
 	if err := reloadState(); err != nil {
 		return nil, statusOutput{}, fmt.Errorf("config reload failed: %w", err)
 	}
-	home, err := os.UserHomeDir()
+	configPath, err := getConfigPath()
 	if err != nil {
-		return nil, statusOutput{}, fmt.Errorf("cannot determine home directory: %w", err)
+		return nil, statusOutput{}, fmt.Errorf("cannot determine config path: %w", err)
 	}
-	configPath := filepath.Join(home, ".config", "oh-my-bridge", "config.json")
 	c, clis := getState()
 	out := statusOutput{
 		Version:           serverVersion,

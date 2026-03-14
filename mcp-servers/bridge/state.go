@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"sync"
 )
 
@@ -17,11 +16,10 @@ var (
 )
 
 func loadConfig() (Config, error) {
-	home, err := os.UserHomeDir()
+	configPath, err := getConfigPath()
 	if err != nil {
 		return Config{}, fmt.Errorf("cannot determine home directory: %w", err)
 	}
-	configPath := filepath.Join(home, ".config", "oh-my-bridge", "config.json")
 	data, err := os.ReadFile(configPath) //nolint:gosec
 	if err != nil {
 		if os.IsNotExist(err) {

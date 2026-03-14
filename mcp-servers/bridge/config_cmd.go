@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -312,18 +311,9 @@ func orderedCategories(routes map[string]string) []string {
 	return append(result, extra...)
 }
 
-// configPath는 config.json 경로를 반환한다.
-func configPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".config", "oh-my-bridge", "config.json"), nil
-}
-
 // saveConfig는 config를 atomic write로 저장한다.
 func saveConfig(c Config) error {
-	path, err := configPath()
+	path, err := getConfigPath()
 	if err != nil {
 		return err
 	}
