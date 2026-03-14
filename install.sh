@@ -22,11 +22,13 @@ if [ -z "$VERSION" ]; then
   exit 1
 fi
 
-# 3. Skip if already current
+# 3. Check if already current
+NEEDS_DOWNLOAD=true
 if [ -x "$BINARY" ]; then
   INSTALLED=$("$BINARY" --version 2>/dev/null || echo "")
   if [ "$INSTALLED" = "$VERSION" ]; then
     echo "oh-my-bridge v${VERSION} already installed"
+    NEEDS_DOWNLOAD=false
   else
     echo "Updating oh-my-bridge v${INSTALLED} → v${VERSION}..."
   fi
@@ -34,18 +36,20 @@ else
   echo "Installing oh-my-bridge v${VERSION}..."
 fi
 
-# 4. Download binary
-mkdir -p "$INSTALL_DIR"
-# GoReleaser name_template: {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
-URL="https://github.com/${REPO}/releases/download/v${VERSION}/oh-my-bridge_${VERSION}_${OS}_${ARCH}.tar.gz"
-TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
-if ! curl -fsSL "$URL" | tar -xz -C "$TMP"; then
-  echo "ERROR: download failed — $URL" >&2
-  exit 1
+# 4. Download binary (skipped if already current)
+if [ "$NEEDS_DOWNLOAD" = true ]; then
+  mkdir -p "$INSTALL_DIR"
+  # GoReleaser name_template: {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+  URL="https://github.com/${REPO}/releases/download/v${VERSION}/oh-my-bridge_${VERSION}_${OS}_${ARCH}.tar.gz"
+  TMP=$(mktemp -d)
+  trap 'rm -rf "$TMP"' EXIT
+  if ! curl -fsSL "$URL" | tar -xz -C "$TMP"; then
+    echo "ERROR: download failed — $URL" >&2
+    exit 1
+  fi
+  mv "$TMP/oh-my-bridge" "$BINARY"
+  chmod +x "$BINARY"
 fi
-mv "$TMP/oh-my-bridge" "$BINARY"
-chmod +x "$BINARY"
 
 # 5. Register MCP
 if command -v claude >/dev/null 2>&1; then

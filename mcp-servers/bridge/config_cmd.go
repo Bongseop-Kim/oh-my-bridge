@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -317,13 +316,5 @@ func saveConfig(c Config) error {
 	if err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), 0600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return writeAtomicJSON(path, c, 0600)
 }
