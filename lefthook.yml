@@ -5,10 +5,10 @@ pre-commit:
       glob: "{skills/**,hooks/**,mcp-servers/bridge/**/*.go}"
       root: .
       run: make embed
-    gofmt-check:
+    goimports-check:
       glob: "**/*.go"
       root: mcp-servers/bridge
-      run: test -z "$(gofmt -l .)"
+      run: test -z "$(find . -name '*.go' | xargs goimports -l)"
     go-vet:
       glob: "**/*.go"
       root: mcp-servers/bridge
@@ -17,3 +17,7 @@ pre-commit:
       glob: "**/*.go"
       root: mcp-servers/bridge
       run: golangci-lint run --config .golangci.yml
+    test:
+      glob: "**/*.go"
+      root: mcp-servers/bridge
+      run: go test -short -count=1 -race -timeout 60s ./...

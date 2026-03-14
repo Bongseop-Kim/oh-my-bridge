@@ -26,8 +26,10 @@ codex --version  # 설치 확인
 gemini --version
 
 # (선택) 린터 + pre-commit
-brew install golangci-lint
+brew install golangci-lint  # v2.1 이상 권장 (CI와 동일 버전)
+golangci-lint --version     # v2.1.x 확인
 go install github.com/evilmartians/lefthook@latest
+go install golang.org/x/tools/cmd/goimports@latest  # 포매터 겸 import 정렬
 lefthook install
 ```
 
@@ -106,8 +108,9 @@ Go 소스 변경 시 커밋 전에 아래 명령어를 실행한다.
 ```bash
 cd mcp-servers/bridge
 
-# 포맷 확인 (출력이 없으면 정상)
-gofmt -l .
+# 포맷 + import 정렬 확인 (출력이 없으면 정상)
+# goimports는 gofmt를 포함하며 import 정렬까지 수행 — pre-commit과 CI 양쪽에서 검사됨
+find . -name '*.go' | xargs goimports -l
 
 # 정적 분석
 go vet ./...
@@ -119,7 +122,7 @@ golangci-lint run --config .golangci.yml
 go test -count=1 -race -timeout 120s ./...
 ```
 
-CI(`ci.yml`)가 PR마다 lint + test를 자동 실행한다. `git commit` 시 pre-commit 훅(gofmt, go vet, golangci-lint)은 전제조건의 `lefthook install`로 활성화된다.
+CI(`ci.yml`)가 PR마다 lint + test를 자동 실행한다. `git commit` 시 pre-commit 훅(goimports, go vet, golangci-lint, test)은 전제조건의 `lefthook install`로 활성화된다.
 
 ## 동작 확인
 
