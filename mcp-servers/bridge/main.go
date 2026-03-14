@@ -20,7 +20,7 @@ import (
 
 const (
 	serverName                  = "oh-my-bridge"
-	serverVersion = "2.4.3"
+	serverVersion               = "2.4.3"
 	defaultMaxTimeoutMs         = 1800000 // 30 minutes
 	defaultFirstOutputTimeoutMs = 30000   // 30 seconds
 	defaultStabilityTimeoutMs   = 10000   // 10 seconds
@@ -29,10 +29,10 @@ const (
 
 // Config is loaded from ~/.config/oh-my-bridge/config.json at startup.
 type Config struct {
-	Routes            map[string]string              `json:"routes"`
-	Models            map[string]ModelDef            `json:"models"`
-	DefaultRoute      string                         `json:"default_route,omitempty"`
-	CategoryOverrides map[string]CategoryOverride    `json:"category_overrides,omitempty"`
+	Routes            map[string]string           `json:"routes"`
+	Models            map[string]ModelDef         `json:"models"`
+	DefaultRoute      string                      `json:"default_route,omitempty"`
+	CategoryOverrides map[string]CategoryOverride `json:"category_overrides,omitempty"`
 }
 
 // CategoryOverride holds per-category settings that override ModelDef defaults.
@@ -91,11 +91,11 @@ var (
 
 // Reason constants for delegateOutput.Reason and logEntry.Reason.
 const (
-	reasonRouteConfigured  = "route_configured"
-	reasonCLINotInstalled  = "cli_not_installed"
-	reasonCLIErrorTimeout  = "cli_error_timeout"
+	reasonRouteConfigured   = "route_configured"
+	reasonCLINotInstalled   = "cli_not_installed"
+	reasonCLIErrorTimeout   = "cli_error_timeout"
 	reasonCLIErrorRateLimit = "cli_error_rate_limit"
-	reasonCLIErrorCrash    = "cli_error_crash"
+	reasonCLIErrorCrash     = "cli_error_crash"
 )
 
 type delegateInput struct {
@@ -508,12 +508,12 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 type statusInput struct{}
 
 type statusOutput struct {
-	Version           string                         `json:"version"`
-	Routes            map[string]string              `json:"routes"`
-	Models            map[string]ModelDef            `json:"models"`
-	CLIStatus         map[string]bool                `json:"cli_status"`
-	ConfigPath        string                         `json:"config_path"`
-	CategoryOverrides map[string]CategoryOverride    `json:"category_overrides,omitempty"`
+	Version           string                      `json:"version"`
+	Routes            map[string]string           `json:"routes"`
+	Models            map[string]ModelDef         `json:"models"`
+	CLIStatus         map[string]bool             `json:"cli_status"`
+	ConfigPath        string                      `json:"config_path"`
+	CategoryOverrides map[string]CategoryOverride `json:"category_overrides,omitempty"`
 }
 
 func statusTool(ctx context.Context, _ *mcp.CallToolRequest, _ statusInput) (*mcp.CallToolResult, statusOutput, error) {
