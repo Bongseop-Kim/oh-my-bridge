@@ -42,7 +42,7 @@ if [ "$NEEDS_DOWNLOAD" = true ]; then
   # GoReleaser name_template: {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
   TARBALL_NAME="oh-my-bridge_${VERSION}_${OS}_${ARCH}.tar.gz"
   URL="https://github.com/${REPO}/releases/download/v${VERSION}/${TARBALL_NAME}"
-  CHECKSUMS_URL="https://github.com/${REPO}/releases/download/v${VERSION}/oh-my-bridge_${VERSION}_checksums.txt"
+  CHECKSUMS_URL="https://github.com/${REPO}/releases/download/v${VERSION}/checksums.txt"
   TMP=$(mktemp -d)
   trap 'rm -rf "$TMP"' EXIT
 
