@@ -43,26 +43,54 @@ type timeoutConfig struct {
 	StabilityTimeoutMs   int
 }
 
-// activityTracker records the last time any bytes were written.
-// It implements io.Writer and is used to detect output stability.
+// activityTracker records the last time any bytes were written, with separate
+// timestamps for "alive" (any output) and "stdout" (actual result output).
+// stderr updates lastAlive only; stdout and output-file mtime update both.
 type activityTracker struct {
-	mu           sync.Mutex
-	lastActivity time.Time
+	mu         sync.Mutex
+	lastAlive  time.Time
+	lastStdout time.Time
 }
 
-func (a *activityTracker) Write(p []byte) (int, error) {
+// touch records activity. stdout=true updates both lastAlive and lastStdout;
+// stdout=false (stderr) updates only lastAlive.
+func (a *activityTracker) touch(stdout bool) {
+	now := time.Now()
+	a.mu.Lock()
+	a.lastAlive = now
+	if stdout {
+		a.lastStdout = now
+	}
+	a.mu.Unlock()
+}
+
+// Snapshot returns both timestamps under a single lock acquisition.
+func (a *activityTracker) Snapshot() (lastAlive, lastStdout time.Time) {
+	a.mu.Lock()
+	lastAlive = a.lastAlive
+	lastStdout = a.lastStdout
+	a.mu.Unlock()
+	return
+}
+
+// stdoutWriterAdapter updates both lastAlive and lastStdout (stdout / output file).
+type stdoutWriterAdapter struct{ t *activityTracker }
+
+func (a stdoutWriterAdapter) Write(p []byte) (int, error) {
 	if len(p) > 0 {
-		a.mu.Lock()
-		a.lastActivity = time.Now()
-		a.mu.Unlock()
+		a.t.touch(true)
 	}
 	return len(p), nil
 }
 
-func (a *activityTracker) LastActivity() time.Time {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.lastActivity
+// aliveWriterAdapter updates only lastAlive (stderr progress signals).
+type aliveWriterAdapter struct{ t *activityTracker }
+
+func (a aliveWriterAdapter) Write(p []byte) (int, error) {
+	if len(p) > 0 {
+		a.t.touch(false)
+	}
+	return len(p), nil
 }
 
 var (

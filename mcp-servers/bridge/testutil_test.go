@@ -9,6 +9,12 @@ import (
 	"testing"
 )
 
+// prependDirToPath prepends dir to PATH for the duration of the test.
+func prependDirToPath(t *testing.T, dir string) {
+	t.Helper()
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
 // makeSlowScript creates a shell script that sleeps for the given number of seconds.
 // Useful for testing timeout behaviour and first-output-timeout (no output produced).
 func makeSlowScript(t *testing.T, seconds int) string {
@@ -90,6 +96,106 @@ func makeIncrementalOutputScript(t *testing.T, chunks int, intervalMs int, final
 	lines += "sleep " + strconv.Itoa(finalSleepSec) + "\n"
 	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
 		t.Fatalf("makeIncrementalOutputScript: %v", err)
+	}
+	return scriptPath
+}
+
+// makeStderrOnlyScript creates a script that writes `chunks` lines to stderr at
+// `intervalMs` ms intervals, then sleeps for `finalSleepSec` seconds.
+// Stdout is never written — simulates a CLI that uses stderr for progress.
+func makeStderrOnlyScript(t *testing.T, chunks, intervalMs, finalSleepSec int) string {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "stderr-only-cli")
+	lines := "#!/bin/sh\n"
+	for i := 0; i < chunks; i++ {
+		lines += fmt.Sprintf("echo chunk%d >&2\n", i)
+		lines += fmt.Sprintf("sleep %.3f\n", float64(intervalMs)/1000.0)
+	}
+	lines += "sleep " + strconv.Itoa(finalSleepSec) + "\n"
+	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
+		t.Fatalf("makeStderrOnlyScript: %v", err)
+	}
+	return scriptPath
+}
+
+// makeStderrThenStdoutScript creates a script that writes `stderrChunks` lines to
+// stderr at `stderrIntervalMs` ms intervals, sleeps `gapSleepSec` seconds, then
+// writes `stdoutPayload` to stdout and exits.
+// Simulates the "thinking via stderr → output dump to stdout" CLI pattern.
+func makeStderrThenStdoutScript(t *testing.T, stderrChunks, stderrIntervalMs, gapSleepSec int, stdoutPayload string) string {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "stderr-then-stdout-cli")
+	lines := "#!/bin/sh\n"
+	for i := 0; i < stderrChunks; i++ {
+		lines += fmt.Sprintf("echo chunk%d >&2\n", i)
+		lines += fmt.Sprintf("sleep %.3f\n", float64(stderrIntervalMs)/1000.0)
+	}
+	lines += "sleep " + strconv.Itoa(gapSleepSec) + "\n"
+	lines += fmt.Sprintf("echo '%s'\n", stdoutPayload)
+	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
+		t.Fatalf("makeStderrThenStdoutScript: %v", err)
+	}
+	return scriptPath
+}
+
+// makePartialOutputScript creates a script that writes `partialText` to stdout
+// without a trailing newline, then sleeps for `finalSleepSec` seconds.
+// Simulates a CLI that produces incomplete output before hanging.
+// partialText must not contain single quotes.
+func makePartialOutputScript(t *testing.T, partialText string, finalSleepSec int) string {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "partial-output-cli")
+	lines := "#!/bin/sh\n"
+	lines += fmt.Sprintf("printf '%%s' '%s'\n", partialText)
+	lines += "sleep " + strconv.Itoa(finalSleepSec) + "\n"
+	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
+		t.Fatalf("makePartialOutputScript: %v", err)
+	}
+	return scriptPath
+}
+
+// makeChildSpawningScript creates a script that emits `parentOutputChunks` lines
+// to stdout at `intervalMs` ms intervals, spawns a background `sleep 60` child,
+// then sleeps for `finalSleepSec` seconds.
+// Used to verify that stability exit properly kills the entire process group.
+func makeChildSpawningScript(t *testing.T, parentOutputChunks, intervalMs, finalSleepSec int) string {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "child-spawning-cli")
+	lines := "#!/bin/sh\n"
+	for i := 0; i < parentOutputChunks; i++ {
+		lines += fmt.Sprintf("echo chunk%d\n", i)
+		lines += fmt.Sprintf("sleep %.3f\n", float64(intervalMs)/1000.0)
+	}
+	lines += "sleep 60 &\n"
+	lines += "sleep " + strconv.Itoa(finalSleepSec) + "\n"
+	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
+		t.Fatalf("makeChildSpawningScript: %v", err)
+	}
+	return scriptPath
+}
+
+// makeOutputFileOnlyScript creates a script that writes `stderrChunks` lines to
+// stderr at `stderrIntervalMs` ms intervals, writes `content` to `outputFile`,
+// then sleeps for `finalSleepSec` seconds. Stdout is never written.
+// Simulates Codex's -o output-file pattern where output bypasses stdout.
+// outputFile and content must not contain single quotes.
+func makeOutputFileOnlyScript(t *testing.T, outputFile, content string, stderrChunks, stderrIntervalMs, finalSleepSec int) string {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "output-file-only-cli")
+	lines := "#!/bin/sh\n"
+	for i := 0; i < stderrChunks; i++ {
+		lines += fmt.Sprintf("echo progress%d >&2\n", i)
+		lines += fmt.Sprintf("sleep %.3f\n", float64(stderrIntervalMs)/1000.0)
+	}
+	lines += fmt.Sprintf("printf '%%s\\n' '%s' > '%s'\n", content, outputFile)
+	lines += "sleep " + strconv.Itoa(finalSleepSec) + "\n"
+	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
+		t.Fatalf("makeOutputFileOnlyScript: %v", err)
 	}
 	return scriptPath
 }

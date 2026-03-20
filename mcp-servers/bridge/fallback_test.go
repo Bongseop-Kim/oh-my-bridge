@@ -15,8 +15,7 @@ import (
 func makeFakeCodex(t *testing.T, exitCode int) {
 	t.Helper()
 	scriptPath := makeNamedExitScript(t, "codex", exitCode)
-	origPath := os.Getenv("PATH")
-	t.Setenv("PATH", filepath.Dir(scriptPath)+string(os.PathListSeparator)+origPath)
+	prependDirToPath(t, filepath.Dir(scriptPath))
 }
 
 func TestClassifyCliError_Timeout(t *testing.T) {
@@ -96,8 +95,7 @@ func makeArgsCaptureFakeCodex(t *testing.T, argsFile string) {
 	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil { //nolint:gosec
 		t.Fatalf("makeArgsCaptureFakeCodex: %v", err)
 	}
-	origPath := os.Getenv("PATH")
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+origPath)
+	prependDirToPath(t, dir)
 }
 
 // makeArgsCaptureFakeGemini creates a fake "gemini" script that writes all args to a file
@@ -110,8 +108,7 @@ func makeArgsCaptureFakeGemini(t *testing.T, argsFile string) {
 	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil { //nolint:gosec
 		t.Fatalf("makeArgsCaptureFakeGemini: %v", err)
 	}
-	origPath := os.Getenv("PATH")
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+origPath)
+	prependDirToPath(t, dir)
 }
 
 // TestDelegateTool_PromptAppend_Codex verifies that category_overrides.prompt_append
@@ -196,12 +193,235 @@ func TestDelegateTool_PromptAppend_Gemini(t *testing.T) {
 	}
 }
 
+// makeGeminiStabilityFakeScript creates a fake "gemini" binary in PATH that
+// outputs `chunks` lines at `intervalMs` ms intervals to stdout, then sleeps.
+// The stdout is non-JSON text; runGemini falls back to raw text on parse failure.
+func makeGeminiStabilityFakeScript(t *testing.T, chunks, intervalMs, finalSleepSec int) {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "gemini")
+	lines := "#!/bin/sh\n"
+	for i := 0; i < chunks; i++ {
+		lines += fmt.Sprintf("echo chunk%d\n", i)
+		lines += fmt.Sprintf("sleep %.3f\n", float64(intervalMs)/1000.0)
+	}
+	lines += fmt.Sprintf("sleep %d\n", finalSleepSec)
+	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
+		t.Fatalf("makeGeminiStabilityFakeScript: %v", err)
+	}
+	prependDirToPath(t, dir)
+}
+
+// makeGeminiStderrOnlyFakeScript creates a fake "gemini" binary in PATH that
+// writes `chunks` lines to stderr at `intervalMs` ms intervals, then sleeps.
+// No stdout is produced — simulates Gemini progress-only pattern.
+func makeGeminiStderrOnlyFakeScript(t *testing.T, chunks, intervalMs, finalSleepSec int) {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "gemini")
+	lines := "#!/bin/sh\n"
+	for i := 0; i < chunks; i++ {
+		lines += fmt.Sprintf("echo chunk%d >&2\n", i)
+		lines += fmt.Sprintf("sleep %.3f\n", float64(intervalMs)/1000.0)
+	}
+	lines += fmt.Sprintf("sleep %d\n", finalSleepSec)
+	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
+		t.Fatalf("makeGeminiStderrOnlyFakeScript: %v", err)
+	}
+	prependDirToPath(t, dir)
+}
+
+// makeCodexOutputFileFakeScript creates a fake "codex" binary in PATH that:
+// writes `stderrChunks` progress lines to stderr, optionally writes `fileContent`
+// to the -o output file (empty string = no write), then sleeps `finalSleepSec` s.
+func makeCodexOutputFileFakeScript(t *testing.T, fileContent string, stderrChunks, intervalMs, finalSleepSec int) {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "codex")
+	lines := `#!/bin/sh
+prev=""
+outfile=""
+for arg in "$@"; do
+    if [ "$prev" = "-o" ]; then
+        outfile="$arg"
+        break
+    fi
+    prev="$arg"
+done
+`
+	for i := 0; i < stderrChunks; i++ {
+		lines += fmt.Sprintf("echo progress%d >&2\n", i)
+		lines += fmt.Sprintf("sleep %.3f\n", float64(intervalMs)/1000.0)
+	}
+	if fileContent != "" {
+		lines += fmt.Sprintf("[ -n \"$outfile\" ] && printf '%%s\\n' '%s' > \"$outfile\"\n", fileContent)
+	}
+	lines += fmt.Sprintf("sleep %d\n", finalSleepSec)
+	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
+		t.Fatalf("makeCodexOutputFileFakeScript: %v", err)
+	}
+	prependDirToPath(t, dir)
+}
+
+// setupDelegateTool configures HOME, OH_MY_BRIDGE_WORKSPACE_ROOT, and the global
+// config state for delegateTool integration tests. Returns a cleanup function.
+func setupDelegateTool(t *testing.T, cfg Config) {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("OH_MY_BRIDGE_WORKSPACE_ROOT", t.TempDir())
+	writeTestConfig(t, home, cfg)
+	saveAndRestoreState(t)
+	if err := reloadState(); err != nil {
+		t.Fatalf("reloadState: %v", err)
+	}
+}
+
+// TestDelegateTool_Gemini_StabilityExit_WarningBanner verifies that when Gemini
+// is terminated by the stability timeout, delegateTool sets StabilityExit=true
+// and prepends the warning banner to the response.
+func TestDelegateTool_Gemini_StabilityExit_WarningBanner(t *testing.T) {
+	// 3 stdout chunks (non-JSON) → stability exits → warning banner prepended.
+	makeGeminiStabilityFakeScript(t, 3, 200, 30)
+
+	setupDelegateTool(t, Config{
+		Routes: map[string]string{"quick": "gemini-flash"},
+		Models: map[string]ModelDef{
+			"gemini-flash": {Command: "gemini", Args: []string{}},
+		},
+	})
+
+	_, output, err := delegateTool(context.Background(), nil, delegateInput{
+		Prompt:               "test prompt",
+		Category:             "quick",
+		StabilityTimeoutMs:   2000,
+		FirstOutputTimeoutMs: 10000,
+		MaxTimeoutMs:         60000,
+	})
+
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if !output.StabilityExit {
+		t.Error("expected StabilityExit = true")
+	}
+	if !strings.Contains(output.Response, "[WARNING: stability-exit") {
+		t.Errorf("expected warning banner in response, got: %q", output.Response)
+	}
+	t.Logf("Gemini stability warning banner: %q", output.Response[:min(80, len(output.Response))])
+}
+
+// TestDelegateTool_Gemini_StabilityExit_EmptyOutput verifies that delegateTool
+// handles the stderr-only Gemini pattern: first-output timeout fires, returning
+// action="claude" with reason="cli_error_timeout".
+func TestDelegateTool_Gemini_StabilityExit_EmptyOutput(t *testing.T) {
+	// stderr progress only → empty stdout → first-output timeout → claude fallback.
+	makeGeminiStderrOnlyFakeScript(t, 3, 200, 30)
+
+	setupDelegateTool(t, Config{
+		Routes: map[string]string{"quick": "gemini-flash"},
+		Models: map[string]ModelDef{
+			"gemini-flash": {Command: "gemini", Args: []string{}},
+		},
+	})
+
+	_, output, err := delegateTool(context.Background(), nil, delegateInput{
+		Prompt:               "test prompt",
+		Category:             "quick",
+		StabilityTimeoutMs:   2000,
+		FirstOutputTimeoutMs: 10000,
+		MaxTimeoutMs:         60000,
+	})
+
+	if err != nil {
+		t.Fatalf("expected no error (fallback), got: %v", err)
+	}
+	if output.Action != "claude" {
+		t.Errorf("expected action=claude, got %q", output.Action)
+	}
+	if !strings.HasPrefix(output.Reason, reasonCLIErrorTimeout) {
+		t.Errorf("expected reason to start with %q, got %q", reasonCLIErrorTimeout, output.Reason)
+	}
+	t.Logf("Gemini stderr-only → claude fallback, Reason: %q", output.Reason)
+}
+
+// TestDelegateTool_Codex_StabilityExit_OutputFileFallback verifies that when
+// Codex writes output to its -o file before stability fires, delegateTool
+// returns that file content with the warning banner prepended.
+func TestDelegateTool_Codex_StabilityExit_OutputFileFallback(t *testing.T) {
+	const fileContent = "codex result via output file"
+	makeCodexOutputFileFakeScript(t, fileContent, 2, 300, 30)
+
+	setupDelegateTool(t, Config{
+		Routes: map[string]string{"deep": "gpt-codex"},
+		Models: map[string]ModelDef{
+			"gpt-codex": {Command: "codex", Args: []string{}},
+		},
+	})
+
+	_, output, err := delegateTool(context.Background(), nil, delegateInput{
+		Prompt:               "test prompt",
+		Category:             "deep",
+		StabilityTimeoutMs:   2000,
+		FirstOutputTimeoutMs: 10000,
+		MaxTimeoutMs:         60000,
+	})
+
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if !output.StabilityExit {
+		t.Error("expected StabilityExit = true")
+	}
+	if !strings.Contains(output.Response, fileContent) {
+		t.Errorf("expected output file content %q in response, got: %q", fileContent, output.Response)
+	}
+	if !strings.Contains(output.Response, "[WARNING: stability-exit") {
+		t.Errorf("expected warning banner in response, got: %q", output.Response)
+	}
+	t.Logf("Codex output-file fallback with banner: %q", output.Response[:min(100, len(output.Response))])
+}
+
+// TestDelegateTool_Codex_StabilityExit_AllEmpty verifies that when Codex
+// produces nothing on stdout or the output file, the first-output timeout fires
+// returning action="claude" with reason="cli_error_timeout".
+func TestDelegateTool_Codex_StabilityExit_AllEmpty(t *testing.T) {
+	// stderr progress only; no stdout; output file empty → first-output timeout → claude fallback.
+	makeCodexOutputFileFakeScript(t, "", 3, 200, 30)
+
+	setupDelegateTool(t, Config{
+		Routes: map[string]string{"deep": "gpt-codex"},
+		Models: map[string]ModelDef{
+			"gpt-codex": {Command: "codex", Args: []string{}},
+		},
+	})
+
+	_, output, err := delegateTool(context.Background(), nil, delegateInput{
+		Prompt:               "test prompt",
+		Category:             "deep",
+		StabilityTimeoutMs:   2000,
+		FirstOutputTimeoutMs: 10000,
+		MaxTimeoutMs:         60000,
+	})
+
+	if err != nil {
+		t.Fatalf("expected no error (fallback), got: %v", err)
+	}
+	if output.Action != "claude" {
+		t.Errorf("expected action=claude, got %q", output.Action)
+	}
+	if !strings.HasPrefix(output.Reason, reasonCLIErrorTimeout) {
+		t.Errorf("expected reason to start with %q, got %q", reasonCLIErrorTimeout, output.Reason)
+	}
+	t.Logf("Codex all-empty → claude fallback, Reason: %q", output.Reason)
+}
+
 // TestDelegateTool_UnsupportedCommand_HardError verifies that an unsupported
 // command (not "codex" or "gemini") returns a hard error without fallback.
 func TestDelegateTool_UnsupportedCommand_HardError(t *testing.T) {
 	// Create a fake "not-codex-not-gemini" binary in PATH so detectCLIs marks it as available.
 	fakeBin := makeNamedExitScript(t, "not-codex-not-gemini", 0)
-	t.Setenv("PATH", filepath.Dir(fakeBin)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	prependDirToPath(t, filepath.Dir(fakeBin))
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
