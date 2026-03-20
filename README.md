@@ -92,6 +92,37 @@ MCP 서버는 Go 정적 바이너리 하나(`bridge`)로 위의 모든 외부 �
 
 ---
 
+## 왜 Claude가 지휘자인가
+
+oh-my-bridge의 핵심 설계 결정 — Claude가 오케스트레이터, 나머지 모델이 서브에이전트 — 은
+[BullshitBench v2](https://github.com/petergpt/bullshit-benchmark) 데이터로 뒷받침된다.
+
+BullshitBench는 AI 모델에게 **잘못된 전제가 담긴 질문 100개**를 던져,
+모델이 헛소리를 감지하고 거부하는 비율을 측정하는 벤치마크다.
+오케스트레이터에게 필요한 능력 — 서브에이전트 출력의 오류를 걸러내는 판단력 — 을
+직접 측정한다.
+
+| 모델 | 헛소리 거부율 | 전체 순위 |
+| --- | --- | --- |
+| **Claude Sonnet 4.6** (reasoning) | **91%** | 🥇 1위 |
+| **Claude Sonnet 4.6** (default) | **89%** | 🥈 2위 |
+| **Claude Opus 4.5** | **90%** | 🥉 3위 |
+| GPT-5.2 Codex (best) | 45% | 21위 |
+| Gemini 3 Pro Preview (best) | 48% | 22위 |
+| GPT-5.3 Codex | 20~24% | 52~55위 |
+| Gemini 2.5 Pro | 20% | 60위 |
+
+Claude는 **reasoning 유무와 무관하게 87~91%로 안정적**이다.
+반면 GPT/Gemini 계열은 reasoning을 높일수록 헛소리를 더 정교하게 수용하는 경향이 있다
+(Gemini 3 Pro: reasoning low 48% → high 36%).
+
+서브에이전트가 잘못된 가정으로 코드를 생성해도, Claude 지휘자가 검증 단계에서 걸러낸다.
+Codex와 Gemini를 생성에 쓰고 Claude를 판단에 쓰는 이유가 여기 있다.
+
+> 데이터 출처: [BullshitBench v2 leaderboard](https://petergpt.github.io/bullshit-benchmark/viewer/index.v2.html) (2026-03-12 기준, 80개 모델 평가)
+
+---
+
 ## 설치
 
 ### 전제 조건
