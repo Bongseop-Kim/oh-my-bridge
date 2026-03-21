@@ -231,38 +231,6 @@ func makeGeminiStderrOnlyFakeScript(t *testing.T, chunks, intervalMs, finalSleep
 	prependDirToPath(t, dir)
 }
 
-// makeCodexOutputFileFakeScript creates a fake "codex" binary in PATH that:
-// writes `stderrChunks` progress lines to stderr, optionally writes `fileContent`
-// to the -o output file (empty string = no write), then sleeps `finalSleepSec` s.
-func makeCodexOutputFileFakeScript(t *testing.T, fileContent string, stderrChunks, intervalMs, finalSleepSec int) {
-	t.Helper()
-	dir := t.TempDir()
-	scriptPath := filepath.Join(dir, "codex")
-	lines := `#!/bin/sh
-prev=""
-outfile=""
-for arg in "$@"; do
-    if [ "$prev" = "-o" ]; then
-        outfile="$arg"
-        break
-    fi
-    prev="$arg"
-done
-`
-	for i := 0; i < stderrChunks; i++ {
-		lines += fmt.Sprintf("echo progress%d >&2\n", i)
-		lines += fmt.Sprintf("sleep %.3f\n", float64(intervalMs)/1000.0)
-	}
-	if fileContent != "" {
-		lines += fmt.Sprintf("[ -n \"$outfile\" ] && printf '%%s\\n' '%s' > \"$outfile\"\n", fileContent)
-	}
-	lines += fmt.Sprintf("sleep %d\n", finalSleepSec)
-	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
-		t.Fatalf("makeCodexOutputFileFakeScript: %v", err)
-	}
-	prependDirToPath(t, dir)
-}
-
 // setupDelegateTool configures HOME, OH_MY_BRIDGE_WORKSPACE_ROOT, and the global
 // config state for delegateTool integration tests. Returns a cleanup function.
 func setupDelegateTool(t *testing.T, cfg Config) {
@@ -350,7 +318,7 @@ func TestDelegateTool_Gemini_StabilityExit_EmptyOutput(t *testing.T) {
 // returns that file content with the warning banner prepended.
 func TestDelegateTool_Codex_StabilityExit_OutputFileFallback(t *testing.T) {
 	const fileContent = "codex result via output file"
-	makeCodexOutputFileFakeScript(t, fileContent, 2, 300, 30)
+	makeFakeCodexInPath(t, fileContent, 2, 300, 30)
 
 	setupDelegateTool(t, Config{
 		Routes: map[string]string{"deep": "gpt-codex"},
@@ -387,7 +355,7 @@ func TestDelegateTool_Codex_StabilityExit_OutputFileFallback(t *testing.T) {
 // returning action="claude" with reason="cli_error_timeout".
 func TestDelegateTool_Codex_StabilityExit_AllEmpty(t *testing.T) {
 	// stderr progress only; no stdout; output file empty → first-output timeout → claude fallback.
-	makeCodexOutputFileFakeScript(t, "", 3, 200, 30)
+	makeFakeCodexInPath(t, "", 3, 200, 30)
 
 	setupDelegateTool(t, Config{
 		Routes: map[string]string{"deep": "gpt-codex"},

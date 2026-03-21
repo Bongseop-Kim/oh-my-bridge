@@ -224,16 +224,14 @@ func runCli(parent context.Context, req cliRequest) (cliResult, error) {
 					return cliResult{}, fmt.Errorf("%w: %s first-output timeout after %dms",
 						ErrTimeout, req.ErrorPrefix, req.Timeout.FirstOutputTimeoutMs)
 				}
-			} else {
+			} else if now.Sub(lastStdout) > stabilityDur {
 				// Stdout has arrived — stability is measured against last stdout.
-				if now.Sub(lastStdout) > stabilityDur {
-					cancel()
-					<-waitCh
-					return cliResult{
-						Text:          strings.TrimSpace(stdoutBuf.String()),
-						StabilityExit: true,
-					}, nil
-				}
+				cancel()
+				<-waitCh
+				return cliResult{
+					Text:          strings.TrimSpace(stdoutBuf.String()),
+					StabilityExit: true,
+				}, nil
 			}
 		}
 	}

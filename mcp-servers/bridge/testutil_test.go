@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -184,6 +186,29 @@ func makeChildSpawningScript(t *testing.T, parentOutputChunks, intervalMs, final
 // Simulates Codex's -o output-file pattern where output bypasses stdout.
 // outputFile and content must not contain single quotes.
 func makeOutputFileOnlyScript(t *testing.T, outputFile, content string, stderrChunks, stderrIntervalMs, finalSleepSec int) string {
+	return makeOutputFileOnlyScriptWithRepeats(
+		t,
+		outputFile,
+		content,
+		stderrChunks,
+		stderrIntervalMs,
+		1,
+		0,
+		finalSleepSec,
+	)
+}
+
+// makeOutputFileOnlyScriptWithRepeats creates a script that writes
+// `stderrChunks` lines to stderr at `stderrIntervalMs` ms intervals, writes
+// `content` to `outputFile` `fileWrites` times, sleeping `fileWriteIntervalMs`
+// ms between writes, then sleeps for `finalSleepSec` seconds. Stdout is never
+// written. Simulates CLIs whose output only appears via a file side channel.
+// outputFile and content must not contain single quotes.
+func makeOutputFileOnlyScriptWithRepeats(
+	t *testing.T,
+	outputFile, content string,
+	stderrChunks, stderrIntervalMs, fileWrites, fileWriteIntervalMs, finalSleepSec int,
+) string {
 	t.Helper()
 	dir := t.TempDir()
 	scriptPath := filepath.Join(dir, "output-file-only-cli")
@@ -192,10 +217,88 @@ func makeOutputFileOnlyScript(t *testing.T, outputFile, content string, stderrCh
 		lines += fmt.Sprintf("echo progress%d >&2\n", i)
 		lines += fmt.Sprintf("sleep %.3f\n", float64(stderrIntervalMs)/1000.0)
 	}
-	lines += fmt.Sprintf("printf '%%s\\n' '%s' > '%s'\n", content, outputFile)
+	for i := 0; i < fileWrites; i++ {
+		lines += fmt.Sprintf("printf '%%s\\n' '%s' > '%s'\n", content, outputFile)
+		if i < fileWrites-1 && fileWriteIntervalMs > 0 {
+			lines += fmt.Sprintf("sleep %.3f\n", float64(fileWriteIntervalMs)/1000.0)
+		}
+	}
 	lines += "sleep " + strconv.Itoa(finalSleepSec) + "\n"
 	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
-		t.Fatalf("makeOutputFileOnlyScript: %v", err)
+		t.Fatalf("makeOutputFileOnlyScriptWithRepeats: %v", err)
 	}
 	return scriptPath
+}
+
+// makeFakeCodexScript creates a fake codex-compatible binary that parses the
+// output file path from the -o argument, writes stderr progress chunks, then
+// optionally writes `fileContent` to that output file before sleeping.
+// `binaryName` controls the created executable name.
+func makeFakeCodexScript(
+	t *testing.T,
+	binaryName, fileContent string,
+	stderrChunks, stderrIntervalMs, finalSleepSec int,
+) string {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, binaryName)
+
+	lines := `#!/bin/sh
+prev=""
+outfile=""
+for arg in "$@"; do
+    if [ "$prev" = "-o" ]; then
+        outfile="$arg"
+        break
+    fi
+    prev="$arg"
+done
+`
+	for i := 0; i < stderrChunks; i++ {
+		lines += fmt.Sprintf("echo progress%d >&2\n", i)
+		lines += fmt.Sprintf("sleep %.3f\n", float64(stderrIntervalMs)/1000.0)
+	}
+	if fileContent != "" {
+		lines += fmt.Sprintf("[ -n \"$outfile\" ] && printf '%%s\\n' '%s' > \"$outfile\"\n", fileContent)
+	}
+	lines += fmt.Sprintf("sleep %d\n", finalSleepSec)
+
+	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
+		t.Fatalf("makeFakeCodexScript: %v", err)
+	}
+	return scriptPath
+}
+
+// makeFakeCodexInPath creates a fake "codex" binary in PATH that parses -o and
+// optionally writes fileContent to the output file. Mirrors makeFakeCodex but
+// for the output-file pattern used by Codex integration tests.
+func makeFakeCodexInPath(t *testing.T, fileContent string, stderrChunks, intervalMs, finalSleepSec int) {
+	t.Helper()
+	scriptPath := makeFakeCodexScript(t, "codex", fileContent, stderrChunks, intervalMs, finalSleepSec)
+	prependDirToPath(t, filepath.Dir(scriptPath))
+}
+
+func TestMakeOutputFileOnlyScript(t *testing.T) {
+	outputFile := filepath.Join(t.TempDir(), "output.txt")
+	scriptPath := makeOutputFileOnlyScript(t, outputFile, "expected content", 3, 10, 0)
+
+	cmd := exec.Command(scriptPath) //nolint:gosec // Test executes a temp script generated within this test.
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("run output-file-only script: %v", err)
+	}
+
+	gotContent, err := os.ReadFile(outputFile) //nolint:gosec // Test reads a temp file created within this test.
+	if err != nil {
+		t.Fatalf("read output file: %v", err)
+	}
+	if string(gotContent) != "expected content\n" {
+		t.Fatalf("unexpected output file content: %q", string(gotContent))
+	}
+
+	if got := stderr.String(); got != "progress0\nprogress1\nprogress2\n" {
+		t.Fatalf("unexpected stderr output: %q", got)
+	}
 }

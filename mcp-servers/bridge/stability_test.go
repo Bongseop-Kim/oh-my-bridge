@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -281,13 +280,7 @@ func TestRunCli_OutputFileMtimeResetsStability(t *testing.T) {
 
 	// Script writes content to outputFile 3 times at 800ms intervals (no stdout/stderr),
 	// then sleeps 30s. File mtime+size updates are the only "activity".
-	dir := t.TempDir()
-	scriptPath := filepath.Join(dir, "mtime-touch-cli")
-	script := fmt.Sprintf("#!/bin/sh\nprintf 'data' > '%s'\nsleep 0.800\nprintf 'data' > '%s'\nsleep 0.800\nprintf 'data' > '%s'\nsleep 30\n",
-		outputFile, outputFile, outputFile)
-	if err := os.WriteFile(scriptPath, []byte(script), 0755); err != nil { //nolint:gosec
-		t.Fatalf("writeScript: %v", err)
-	}
+	scriptPath := makeOutputFileOnlyScriptWithRepeats(t, outputFile, "data", 0, 0, 3, 800, 30)
 
 	start := time.Now()
 	result, err := runCli(context.Background(), cliRequest{
