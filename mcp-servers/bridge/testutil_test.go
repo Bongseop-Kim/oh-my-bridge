@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-// escapeForSingleQuotedShell replaces each single-quote in s with '\''.
+// escapeForSingleQuotedShell replaces each single-quote in s with '\”.
 // Use this before embedding a value inside a single-quoted shell literal.
 func escapeForSingleQuotedShell(s string) string {
 	return strings.ReplaceAll(s, "'", `'\''`)
@@ -225,7 +225,13 @@ func makeOutputFileOnlyScriptWithRepeats(
 		lines += fmt.Sprintf("sleep %.3f\n", float64(stderrIntervalMs)/1000.0)
 	}
 	for i := 0; i < fileWrites; i++ {
-		uniqueContent := escapeForSingleQuotedShell(fmt.Sprintf("%s%d", content, i))
+		var rawContent string
+		if i == 0 {
+			rawContent = content
+		} else {
+			rawContent = fmt.Sprintf("%s%d", content, i)
+		}
+		uniqueContent := escapeForSingleQuotedShell(rawContent)
 		lines += fmt.Sprintf("printf '%%s\\n' '%s' > '%s'\n", uniqueContent, escapeForSingleQuotedShell(outputFile))
 		if i < fileWrites-1 && fileWriteIntervalMs > 0 {
 			lines += fmt.Sprintf("sleep %.3f\n", float64(fileWriteIntervalMs)/1000.0)
@@ -307,7 +313,7 @@ func TestMakeOutputFileOnlyScript(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read output file: %v", err)
 	}
-	if string(gotContent) != "expected content0\n" {
+	if string(gotContent) != "expected content\n" {
 		t.Fatalf("unexpected output file content: %q", string(gotContent))
 	}
 
