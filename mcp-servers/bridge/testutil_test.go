@@ -8,8 +8,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 )
+
+// escapeForSingleQuotedShell replaces each single-quote in s with '\''.
+// Use this before embedding a value inside a single-quoted shell literal.
+func escapeForSingleQuotedShell(s string) string {
+	return strings.ReplaceAll(s, "'", `'\''`)
+}
 
 // prependDirToPath prepends dir to PATH for the duration of the test.
 func prependDirToPath(t *testing.T, dir string) {
@@ -135,7 +142,7 @@ func makeStderrThenStdoutScript(t *testing.T, stderrChunks, stderrIntervalMs, ga
 		lines += fmt.Sprintf("sleep %.3f\n", float64(stderrIntervalMs)/1000.0)
 	}
 	lines += "sleep " + strconv.Itoa(gapSleepSec) + "\n"
-	lines += fmt.Sprintf("echo '%s'\n", stdoutPayload)
+	lines += fmt.Sprintf("echo '%s'\n", escapeForSingleQuotedShell(stdoutPayload))
 	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
 		t.Fatalf("makeStderrThenStdoutScript: %v", err)
 	}
@@ -151,7 +158,7 @@ func makePartialOutputScript(t *testing.T, partialText string, finalSleepSec int
 	dir := t.TempDir()
 	scriptPath := filepath.Join(dir, "partial-output-cli")
 	lines := "#!/bin/sh\n"
-	lines += fmt.Sprintf("printf '%%s' '%s'\n", partialText)
+	lines += fmt.Sprintf("printf '%%s' '%s'\n", escapeForSingleQuotedShell(partialText))
 	lines += "sleep " + strconv.Itoa(finalSleepSec) + "\n"
 	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
 		t.Fatalf("makePartialOutputScript: %v", err)
@@ -218,7 +225,8 @@ func makeOutputFileOnlyScriptWithRepeats(
 		lines += fmt.Sprintf("sleep %.3f\n", float64(stderrIntervalMs)/1000.0)
 	}
 	for i := 0; i < fileWrites; i++ {
-		lines += fmt.Sprintf("printf '%%s\\n' '%s' > '%s'\n", content, outputFile)
+		uniqueContent := escapeForSingleQuotedShell(fmt.Sprintf("%s%d", content, i))
+		lines += fmt.Sprintf("printf '%%s\\n' '%s' > '%s'\n", uniqueContent, escapeForSingleQuotedShell(outputFile))
 		if i < fileWrites-1 && fileWriteIntervalMs > 0 {
 			lines += fmt.Sprintf("sleep %.3f\n", float64(fileWriteIntervalMs)/1000.0)
 		}
@@ -259,7 +267,7 @@ done
 		lines += fmt.Sprintf("sleep %.3f\n", float64(stderrIntervalMs)/1000.0)
 	}
 	if fileContent != "" {
-		lines += fmt.Sprintf("[ -n \"$outfile\" ] && printf '%%s\\n' '%s' > \"$outfile\"\n", fileContent)
+		lines += fmt.Sprintf("[ -n \"$outfile\" ] && printf '%%s\\n' '%s' > \"$outfile\"\n", escapeForSingleQuotedShell(fileContent))
 	}
 	lines += fmt.Sprintf("sleep %d\n", finalSleepSec)
 
@@ -283,18 +291,23 @@ func TestMakeOutputFileOnlyScript(t *testing.T) {
 	scriptPath := makeOutputFileOnlyScript(t, outputFile, "expected content", 3, 10, 0)
 
 	cmd := exec.Command(scriptPath) //nolint:gosec // Test executes a temp script generated within this test.
-	var stderr bytes.Buffer
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("run output-file-only script: %v", err)
 	}
 
+	if got := stdout.String(); got != "" {
+		t.Fatalf("expected empty stdout, got %q", got)
+	}
+
 	gotContent, err := os.ReadFile(outputFile) //nolint:gosec // Test reads a temp file created within this test.
 	if err != nil {
 		t.Fatalf("read output file: %v", err)
 	}
-	if string(gotContent) != "expected content\n" {
+	if string(gotContent) != "expected content0\n" {
 		t.Fatalf("unexpected output file content: %q", string(gotContent))
 	}
 
