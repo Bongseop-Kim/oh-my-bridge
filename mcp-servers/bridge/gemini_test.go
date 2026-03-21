@@ -199,3 +199,96 @@ func TestParseGeminiJSON_Invalid(t *testing.T) {
 		t.Errorf("expected raw fallback %q, got %q", raw, got)
 	}
 }
+
+// TestParseGeminiJSON_TruncatedJSON verifies that a truncated JSON string (parse
+// error) is returned as-is rather than causing a panic or empty result.
+func TestParseGeminiJSON_TruncatedJSON(t *testing.T) {
+	raw := `{"response": "hello wor`
+	got := parseGeminiJSON(raw)
+	if got != raw {
+		t.Errorf("expected raw fallback for truncated JSON, got %q", got)
+	}
+}
+
+// TestParseGeminiJSON_EmptyResponseField verifies that a valid JSON object with
+// an empty "response" field causes raw JSON to be returned (not the empty string).
+func TestParseGeminiJSON_EmptyResponseField(t *testing.T) {
+	raw := `{"session_id":"abc","response":"","stats":{}}`
+	got := parseGeminiJSON(raw)
+	if got != raw {
+		t.Errorf("expected raw JSON fallback for empty response field, got %q", got)
+	}
+}
+
+// TestParseGeminiJSON_NullResponseField verifies that a null "response" field
+// (which unmarshals to empty string in Go) causes raw JSON to be returned.
+func TestParseGeminiJSON_NullResponseField(t *testing.T) {
+	raw := `{"response":null}`
+	got := parseGeminiJSON(raw)
+	if got != raw {
+		t.Errorf("expected raw JSON fallback for null response field, got %q", got)
+	}
+}
+
+// TestRunGemini_StabilityExitPartialJSON verifies that when stability fires with
+// a truncated JSON string in the stdout buffer, parseGeminiJSON returns the raw
+// partial string (not an empty result or a panic).
+func TestRunGemini_StabilityExitPartialJSON(t *testing.T) {
+	// printf writes truncated JSON without trailing newline, then script sleeps.
+	// Stability fires after 2s, capturing whatever is in the stdout buffer.
+	const partialJSON = `{"response": "hello wor`
+	script := makePartialOutputScript(t, partialJSON, 30)
+
+	start := time.Now()
+	result, err := runGemini(context.Background(), runOptions{
+		Prompt: "test prompt",
+		CWD:    t.TempDir(),
+		ModelDef: ModelDef{
+			Command: script,
+			Args:    []string{},
+		},
+		Timeout: timeoutConfig{MaxTimeoutMs: 60000, FirstOutputTimeoutMs: 10000, StabilityTimeoutMs: 2000},
+	})
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("expected success (stability exit), got error: %v", err)
+	}
+	if !result.StabilityExit {
+		t.Error("expected StabilityExit = true")
+	}
+	// parseGeminiJSON falls back to raw on truncated input
+	if result.Text != partialJSON {
+		t.Errorf("expected raw truncated JSON %q, got: %q", partialJSON, result.Text)
+	}
+	if elapsed > 8*time.Second {
+		t.Errorf("took too long: %v (want < 8s)", elapsed)
+	}
+	t.Logf("partial-JSON stability exit in %v, text: %q", elapsed, result.Text)
+}
+
+// TestRunGemini_StderrOnlyActivity_EmptyResult verifies that the Gemini
+// stderr-only pattern (progress on stderr, no stdout JSON) results in
+// ErrTimeout — first-output timeout fires once stderr goes quiet.
+func TestRunGemini_StderrOnlyActivity_EmptyResult(t *testing.T) {
+	// Fake gemini: stderr progress only, no stdout JSON.
+	script := makeStderrOnlyScript(t, 5, 500, 30)
+
+	_, err := runGemini(context.Background(), runOptions{
+		Prompt: "test prompt",
+		CWD:    t.TempDir(),
+		ModelDef: ModelDef{
+			Command: script,
+			Args:    []string{},
+		},
+		Timeout: timeoutConfig{MaxTimeoutMs: 60000, FirstOutputTimeoutMs: 10000, StabilityTimeoutMs: 2000},
+	})
+
+	if err == nil {
+		t.Fatal("expected ErrTimeout, got nil")
+	}
+	if !errors.Is(err, ErrTimeout) {
+		t.Errorf("expected ErrTimeout, got: %v", err)
+	}
+	t.Logf("stderr-only gemini first-output timeout: %v", err)
+}

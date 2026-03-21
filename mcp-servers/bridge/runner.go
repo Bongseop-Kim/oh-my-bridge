@@ -138,11 +138,11 @@ func runCli(parent context.Context, req cliRequest) (cliResult, error) {
 	readerWg.Add(2)
 	go func() {
 		defer readerWg.Done()
-		io.Copy(io.MultiWriter(&stdoutBuf, tracker), stdoutPipe) //nolint:errcheck,gosec
+		io.Copy(io.MultiWriter(&stdoutBuf, stdoutWriterAdapter{tracker}), stdoutPipe) //nolint:errcheck,gosec
 	}()
 	go func() {
 		defer readerWg.Done()
-		io.Copy(io.MultiWriter(&stderrBuf, tracker), stderrPipe) //nolint:errcheck,gosec
+		io.Copy(io.MultiWriter(&stderrBuf, aliveWriterAdapter{tracker}), stderrPipe) //nolint:errcheck,gosec
 	}()
 
 	type waitResult struct{ err error }
@@ -153,6 +153,8 @@ func runCli(parent context.Context, req cliRequest) (cliResult, error) {
 	}()
 
 	startTime := time.Now()
+	stabilityDur := time.Duration(req.Timeout.StabilityTimeoutMs) * time.Millisecond
+	firstOutputDur := time.Duration(req.Timeout.FirstOutputTimeoutMs) * time.Millisecond
 	var lastFileMtime time.Time
 	if req.OutputFile != "" {
 		if fi, statErr := os.Stat(req.OutputFile); statErr == nil {
@@ -197,31 +199,39 @@ func runCli(parent context.Context, req cliRequest) (cliResult, error) {
 				if fi, statErr := os.Stat(req.OutputFile); statErr == nil {
 					currentMtime := fi.ModTime()
 					if currentMtime.After(lastFileMtime) {
-						_, _ = tracker.Write([]byte{1})
 						lastFileMtime = currentMtime
+						if fi.Size() > 0 {
+							// 실제 내용이 있을 때만 stdout 신호 → stability 타이머 시작
+							tracker.touch(true)
+						} else {
+							// 빈 파일 변경 (초기화 등) → alive 신호만
+							tracker.touch(false)
+						}
 					}
 				}
 			}
 
 			now := time.Now()
-			lastActivity := tracker.LastActivity()
+			lastAlive, lastStdout := tracker.Snapshot()
 
-			if lastActivity.IsZero() {
-				if now.Sub(startTime) > time.Duration(req.Timeout.FirstOutputTimeoutMs)*time.Millisecond {
+			if lastStdout.IsZero() {
+				// No stdout yet — stay in first-output mode.
+				// Fire first-output timeout once alive goes quiet AND enough time has passed.
+				aliveQuiet := lastAlive.IsZero() || now.Sub(lastAlive) > stabilityDur
+				if aliveQuiet && now.Sub(startTime) > firstOutputDur {
 					cancel()
 					<-waitCh
 					return cliResult{}, fmt.Errorf("%w: %s first-output timeout after %dms",
 						ErrTimeout, req.ErrorPrefix, req.Timeout.FirstOutputTimeoutMs)
 				}
-			} else {
-				if now.Sub(lastActivity) > time.Duration(req.Timeout.StabilityTimeoutMs)*time.Millisecond {
-					cancel()
-					<-waitCh
-					return cliResult{
-						Text:          strings.TrimSpace(stdoutBuf.String()),
-						StabilityExit: true,
-					}, nil
-				}
+			} else if now.Sub(lastStdout) > stabilityDur {
+				// Stdout has arrived — stability is measured against last stdout.
+				cancel()
+				<-waitCh
+				return cliResult{
+					Text:          strings.TrimSpace(stdoutBuf.String()),
+					StabilityExit: true,
+				}, nil
 			}
 		}
 	}

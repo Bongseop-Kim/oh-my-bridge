@@ -1,6 +1,6 @@
 ---
 name: oh-my-bridge:code-routing
-description: "ALWAYS invoke before any code change. Multi-model router — delegates to the best model (Codex, Gemini, or Claude-native) by category. No API keys required."
+description: "You MUST use this before writing any code that creates or changes logic — new components, pages, services, controllers, API handlers, test suites, algorithm implementations, or any refactoring. This is the multi-model routing gateway: routes to Codex (backend/logic), Gemini (UI/visual), or Claude-native (trivial edits) via mcp__bridge__delegate. Invoke before: creating new files, implementing functions or classes, adding features, refactoring modules, or optimizing algorithms. Also trigger when the user says — 생성(만들어줘/생성해줘/작성해줘/짜줘/개발해줘 · make/create/build/write/generate), 구현(구현해줘/적용해줘 · implement/develop), 추가(추가해줘/넣어줘/붙여줘 · add/insert/include), 재설계(리팩토링해줘/분리해줘/재설계해줘/뽑아줘 · refactor/restructure/redesign/extract), 개선(최적화해줘/개선해줘/정리해줘 · optimize/improve/clean up/enhance), 설계(설계해줘/잡아줘 · design/architect). Skip only for: typo fixes, config values, doc edits, lock files, or explaining code."
 ---
 
 # Multi-Model Code Routing
