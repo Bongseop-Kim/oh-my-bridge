@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -62,11 +63,93 @@ func (c *codexMCPClient) invalidate() {
 // Example: ["exec", "--full-auto", "-m", "gpt-5.4"] → "gpt-5.4"
 func extractModelFromArgs(args []string) string {
 	for i, arg := range args {
-		if arg == "-m" && i+1 < len(args) {
+		if (arg == "-m" || arg == "--model") && i+1 < len(args) {
 			return args[i+1]
 		}
 	}
 	return ""
+}
+
+type codexMCPRequestConfig struct {
+	model          string
+	approvalPolicy string
+	sandbox        string
+}
+
+func parseCodexMCPRequestConfig(args []string, bypassApprovals bool) (codexMCPRequestConfig, error) {
+	var cfg codexMCPRequestConfig
+
+	makeSetter := func(field *string, fieldName string) func(string, string) error {
+		return func(value, source string) error {
+			if *field != "" && *field != value {
+				return fmt.Errorf("conflicting codex %s from %s: %q conflicts with %q", fieldName, source, value, *field)
+			}
+			*field = value
+			return nil
+		}
+	}
+	setApprovalPolicy := makeSetter(&cfg.approvalPolicy, "approval policy")
+	setSandbox := makeSetter(&cfg.sandbox, "sandbox")
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch arg {
+		case "", "exec":
+			continue
+		case "-m", "--model":
+			if i+1 >= len(args) || strings.TrimSpace(args[i+1]) == "" {
+				return codexMCPRequestConfig{}, fmt.Errorf("codex arg %q requires a model value", arg)
+			}
+			cfg.model = args[i+1]
+			i++
+		case "--full-auto":
+			if err := setApprovalPolicy("never", arg); err != nil {
+				return codexMCPRequestConfig{}, err
+			}
+			if err := setSandbox("workspace-write", arg); err != nil {
+				return codexMCPRequestConfig{}, err
+			}
+		case "--dangerously-bypass-approvals-and-sandbox":
+			if err := setApprovalPolicy("never", arg); err != nil {
+				return codexMCPRequestConfig{}, err
+			}
+			if err := setSandbox("danger-full-access", arg); err != nil {
+				return codexMCPRequestConfig{}, err
+			}
+		case "--ask-for-approval":
+			if i+1 >= len(args) || strings.TrimSpace(args[i+1]) == "" {
+				return codexMCPRequestConfig{}, fmt.Errorf("codex arg %q requires a value", arg)
+			}
+			if err := setApprovalPolicy(args[i+1], arg); err != nil {
+				return codexMCPRequestConfig{}, err
+			}
+			i++
+		case "--sandbox":
+			if i+1 >= len(args) || strings.TrimSpace(args[i+1]) == "" {
+				return codexMCPRequestConfig{}, fmt.Errorf("codex arg %q requires a value", arg)
+			}
+			if err := setSandbox(args[i+1], arg); err != nil {
+				return codexMCPRequestConfig{}, err
+			}
+			i++
+		default:
+			return codexMCPRequestConfig{}, fmt.Errorf("unsupported codex arg %q in ModelDef.Args", arg)
+		}
+	}
+
+	if bypassApprovals {
+		cfg.approvalPolicy = "never"
+		cfg.sandbox = "danger-full-access"
+	} else {
+		if cfg.approvalPolicy == "" {
+			cfg.approvalPolicy = "untrusted"
+		}
+		if cfg.sandbox == "" {
+			cfg.sandbox = "workspace-write"
+		}
+	}
+
+	return cfg, nil
 }
 
 // firstTextContent returns the text of the first TextContent item in content.
@@ -80,11 +163,6 @@ func firstTextContent(content []mcp.Content) string {
 }
 
 func callCodexMCP(ctx context.Context, c *codexMCPClient, opts runOptions, developerInstructions string) (cliResult, error) {
-	session, err := c.getOrConnect(ctx)
-	if err != nil {
-		return cliResult{}, err
-	}
-
 	callCtx := ctx
 	var cancel context.CancelFunc = func() {}
 	if opts.Timeout.MaxTimeoutMs > 0 {
@@ -92,22 +170,31 @@ func callCodexMCP(ctx context.Context, c *codexMCPClient, opts runOptions, devel
 	}
 	defer cancel()
 
+	requestCfg, err := parseCodexMCPRequestConfig(opts.ModelDef.Args, opts.BypassApprovals)
+	if err != nil {
+		return cliResult{}, err
+	}
+
+	session, err := c.getOrConnect(callCtx)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			c.invalidate()
+			return cliResult{}, fmt.Errorf("%w: codex mcp connect timed out", ErrTimeout)
+		}
+		return cliResult{}, err
+	}
+
 	args := map[string]any{
 		"prompt": opts.Prompt,
 	}
 	if opts.CWD != "" {
 		args["cwd"] = opts.CWD
 	}
-	if model := extractModelFromArgs(opts.ModelDef.Args); model != "" {
-		args["model"] = model
+	if requestCfg.model != "" {
+		args["model"] = requestCfg.model
 	}
-	if opts.BypassApprovals {
-		args["approval-policy"] = "never"
-		args["sandbox"] = "danger-full-access"
-	} else {
-		args["approval-policy"] = "untrusted"
-		args["sandbox"] = "workspace-write"
-	}
+	args["approval-policy"] = requestCfg.approvalPolicy
+	args["sandbox"] = requestCfg.sandbox
 	if opts.ReasoningEffort != "" {
 		args["config"] = map[string]any{
 			"model_reasoning_effort": opts.ReasoningEffort,

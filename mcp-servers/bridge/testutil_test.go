@@ -24,6 +24,17 @@ func prependDirToPath(t *testing.T, dir string) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
+func makeNamedProxyScript(t *testing.T, name, target string) string {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, name)
+	content := fmt.Sprintf("#!/bin/sh\nexec '%s' \"$@\"\n", escapeForSingleQuotedShell(target))
+	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil { //nolint:gosec
+		t.Fatalf("makeNamedProxyScript: %v", err)
+	}
+	return scriptPath
+}
+
 // makeSlowScript creates a shell script that sleeps for the given number of seconds.
 // Useful for testing timeout behaviour and first-output-timeout (no output produced).
 func makeSlowScript(t *testing.T, seconds int) string {

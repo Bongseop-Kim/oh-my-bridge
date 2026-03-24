@@ -42,7 +42,7 @@ Gemini CLI는 `--output-format json` 모드에서 LLM 응답이 완성될 때까
 
 `-o stream-json` 모드는 JSONL 이벤트 스트림을 출력한다:
 
-```
+```jsonl
 {"type":"init","session_id":"<UUID>","model":"..."}   ← 프로세스 시작 후 즉시
 {"type":"message","role":"assistant","content":"...","delta":true}
 {"type":"result","status":"success","stats":{...}}    ← 완료 신호

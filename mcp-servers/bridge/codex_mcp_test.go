@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -12,6 +13,10 @@ import (
 // If captureFile is non-empty, each tools/call request body is written there.
 // If errResponse is true, tools/call returns IsError=true.
 func newFakeCodexMCPServer(t *testing.T, response, captureFile string, errResponse bool) string {
+	return newFakeCodexMCPServerWithInitDelay(t, response, captureFile, errResponse, 0)
+}
+
+func newFakeCodexMCPServerWithInitDelay(t *testing.T, response, captureFile string, errResponse bool, initDelayMs int) string {
 	t.Helper()
 
 	var toolResultFmt string
@@ -25,12 +30,16 @@ func newFakeCodexMCPServer(t *testing.T, response, captureFile string, errRespon
 	if captureFile != "" {
 		captureStmt = fmt.Sprintf("        echo \"$line\" > %s\n", captureFile)
 	}
+	initDelayStmt := ""
+	if initDelayMs > 0 {
+		initDelayStmt = fmt.Sprintf("        sleep %.3f\n", float64(initDelayMs)/1000.0)
+	}
 
 	script := `#!/bin/bash
 while IFS= read -r line; do
     id=$(echo "$line" | grep -o '"id":[0-9]*' | head -1 | cut -d: -f2)
     if echo "$line" | grep -q '"method":"initialize"'; then
-        printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"fake-codex","version":"0.0.1"}}}\n' "$id"
+` + initDelayStmt + `        printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"fake-codex","version":"0.0.1"}}}\n' "$id"
     elif echo "$line" | grep -q '"method":"tools/call"'; then
 ` + captureStmt + `        printf '` + toolResultFmt + `\n' "$id"
     fi
@@ -111,12 +120,83 @@ func TestCallCodexMCP_Reconnect_AfterInvalidate(t *testing.T) {
 	}
 }
 
+func TestCallCodexMCP_MapsKnownArgs(t *testing.T) {
+	captureFile := t.TempDir() + "/capture.txt"
+	serverBin := newFakeCodexMCPServer(t, "ok", captureFile, false)
+	client := newCodexMCPClient(serverBin)
+
+	_, err := callCodexMCP(context.Background(), client, runOptions{
+		Prompt: "test",
+		CWD:    t.TempDir(),
+		ModelDef: ModelDef{
+			Command: cmdCodex,
+			Args:    []string{"exec", "--full-auto", "--sandbox", "workspace-write", "-m", "gpt-5.4"},
+		},
+		Timeout: timeoutConfig{MaxTimeoutMs: 30000},
+	}, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(captureFile) //nolint:gosec
+	if err != nil {
+		t.Fatalf("capture file not written: %v", err)
+	}
+	captured := string(data)
+	if !strings.Contains(captured, `"model":"gpt-5.4"`) {
+		t.Fatalf("model not forwarded, captured: %q", captured)
+	}
+	if !strings.Contains(captured, `"approval-policy":"never"`) {
+		t.Fatalf("approval policy not forwarded, captured: %q", captured)
+	}
+	if !strings.Contains(captured, `"sandbox":"workspace-write"`) {
+		t.Fatalf("sandbox not forwarded, captured: %q", captured)
+	}
+}
+
+func TestCallCodexMCP_RejectsUnknownArgs(t *testing.T) {
+	serverBin := newFakeCodexMCPServer(t, "ok", "", false)
+	client := newCodexMCPClient(serverBin)
+
+	_, err := callCodexMCP(context.Background(), client, runOptions{
+		Prompt:   "test",
+		CWD:      t.TempDir(),
+		ModelDef: ModelDef{Command: cmdCodex, Args: []string{"exec", "--not-supported"}},
+		Timeout:  timeoutConfig{MaxTimeoutMs: 30000},
+	}, "")
+	if err == nil {
+		t.Fatal("expected error for unsupported codex arg, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported codex arg") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCallCodexMCP_TimeoutIncludesColdStartConnect(t *testing.T) {
+	serverBin := newFakeCodexMCPServerWithInitDelay(t, "ok", "", false, 250)
+	client := newCodexMCPClient(serverBin)
+
+	_, err := callCodexMCP(context.Background(), client, runOptions{
+		Prompt:   "test",
+		CWD:      t.TempDir(),
+		ModelDef: ModelDef{Command: cmdCodex, Args: []string{"exec", "--full-auto", "-m", "gpt-5.4"}},
+		Timeout:  timeoutConfig{MaxTimeoutMs: 50},
+	}, "")
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	if !errors.Is(err, ErrTimeout) {
+		t.Fatalf("expected ErrTimeout, got %v", err)
+	}
+}
+
 func TestExtractModelFromArgs(t *testing.T) {
 	cases := []struct {
 		args []string
 		want string
 	}{
 		{[]string{"exec", "--full-auto", "-m", "gpt-5.4"}, "gpt-5.4"},
+		{[]string{"exec", "--model", "gpt-5.4"}, "gpt-5.4"},
 		{[]string{"exec", "-m", "o3"}, "o3"},
 		{[]string{"exec", "--full-auto"}, ""},
 		{[]string{}, ""},

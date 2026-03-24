@@ -46,6 +46,8 @@ func TestDelegateTool_CLIError_ReturnsClaude(t *testing.T) {
 	// fake codex mcp server: IsError=true 응답 반환
 	serverBin := newFakeCodexMCPServer(t, "model error occurred", "", true)
 	codexClient := newCodexMCPClient(serverBin)
+	fakeCodex := makeNamedProxyScript(t, cmdCodex, serverBin)
+	prependDirToPath(t, filepath.Dir(fakeCodex))
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -102,6 +104,8 @@ func TestDelegateTool_PromptAppend_Codex(t *testing.T) {
 	captureFile := filepath.Join(t.TempDir(), "captured-prompt.txt")
 	serverBin := newFakeCodexMCPServer(t, "ok", captureFile, false)
 	codexClient := newCodexMCPClient(serverBin)
+	fakeCodex := makeNamedProxyScript(t, cmdCodex, serverBin)
+	prependDirToPath(t, filepath.Dir(fakeCodex))
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
