@@ -244,54 +244,6 @@ func makeOutputFileOnlyScriptWithRepeats(
 	return scriptPath
 }
 
-// makeFakeCodexScript creates a fake codex-compatible binary that parses the
-// output file path from the -o argument, writes stderr progress chunks, then
-// optionally writes `fileContent` to that output file before sleeping.
-// `binaryName` controls the created executable name.
-func makeFakeCodexScript(
-	t *testing.T,
-	binaryName, fileContent string,
-	stderrChunks, stderrIntervalMs, finalSleepSec int,
-) string {
-	t.Helper()
-	dir := t.TempDir()
-	scriptPath := filepath.Join(dir, binaryName)
-
-	lines := `#!/bin/sh
-prev=""
-outfile=""
-for arg in "$@"; do
-    if [ "$prev" = "-o" ]; then
-        outfile="$arg"
-        break
-    fi
-    prev="$arg"
-done
-`
-	for i := 0; i < stderrChunks; i++ {
-		lines += fmt.Sprintf("echo progress%d >&2\n", i)
-		lines += fmt.Sprintf("sleep %.3f\n", float64(stderrIntervalMs)/1000.0)
-	}
-	if fileContent != "" {
-		lines += fmt.Sprintf("[ -n \"$outfile\" ] && printf '%%s\\n' '%s' > \"$outfile\"\n", escapeForSingleQuotedShell(fileContent))
-	}
-	lines += fmt.Sprintf("sleep %d\n", finalSleepSec)
-
-	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
-		t.Fatalf("makeFakeCodexScript: %v", err)
-	}
-	return scriptPath
-}
-
-// makeFakeCodexInPath creates a fake "codex" binary in PATH that parses -o and
-// optionally writes fileContent to the output file. Mirrors makeFakeCodex but
-// for the output-file pattern used by Codex integration tests.
-func makeFakeCodexInPath(t *testing.T, fileContent string, stderrChunks, intervalMs, finalSleepSec int) {
-	t.Helper()
-	scriptPath := makeFakeCodexScript(t, "codex", fileContent, stderrChunks, intervalMs, finalSleepSec)
-	prependDirToPath(t, filepath.Dir(scriptPath))
-}
-
 func TestMakeOutputFileOnlyScript(t *testing.T) {
 	outputFile := filepath.Join(t.TempDir(), "output.txt")
 	scriptPath := makeOutputFileOnlyScript(t, outputFile, "expected content", 3, 10, 0)

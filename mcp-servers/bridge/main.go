@@ -51,6 +51,9 @@ func main() {
 	}
 	availableCLIs = detectCLIs(cfg)
 
+	codexClient := newCodexMCPClient(cmdCodex)
+	defer codexClient.invalidate()
+
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    serverName,
 		Version: serverVersion,
@@ -59,7 +62,9 @@ func main() {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "delegate",
 		Description: "Delegate a code generation task to the best available AI model.",
-	}, delegateTool)
+	}, func(ctx context.Context, req *mcp.CallToolRequest, input delegateInput) (*mcp.CallToolResult, delegateOutput, error) {
+		return delegateTool(ctx, req, input, codexClient)
+	})
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "status",

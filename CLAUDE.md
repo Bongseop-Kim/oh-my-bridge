@@ -77,9 +77,12 @@ MCP 호출 후에는 `Read` 도구로 생성 파일을 확인하고 결과를 �
 
 ## MCP Latency
 
-MCP 툴(Codex, Gemini)은 Claude 네이티브 Write/Edit보다 3–4배 느리다. 단순 편집은 MCP를 거치지 않는 이유다.
+MCP 툴은 Claude 네이티브 Write/Edit보다 느리다. 단순 편집은 MCP를 거치지 않는 이유다.
 
-지연 원인과 프로세스 생명주기 상세: [docs/architecture.md](docs/architecture.md#3-mcp-서버-프로세스-생명주기)
+- **Codex**: `codex mcp-server` 영구 세션 — 세션 최초 1회만 기동, 이후 콜드 스타트 없음
+- **Gemini**: 매 호출마다 CLI exec — 콜드 스타트 5s+ 포함
+
+지연 원인과 프로세스 생명주기 상세: [docs/architecture.md](docs/architecture.md#1-mcp-서버-프로세스-생명주기)
 
 ## 코드 펜스 규칙
 

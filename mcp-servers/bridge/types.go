@@ -25,8 +25,9 @@ type Config struct {
 
 // CategoryOverride holds per-category settings that override ModelDef defaults.
 type CategoryOverride struct {
-	ReasoningEffort string `json:"reasoning_effort,omitempty"`
-	PromptAppend    string `json:"prompt_append,omitempty"`
+	ReasoningEffort       string `json:"reasoning_effort,omitempty"`
+	PromptAppend          string `json:"prompt_append,omitempty"`
+	DeveloperInstructions string `json:"developer_instructions,omitempty"`
 }
 
 // ModelDef describes how to invoke a specific model via CLI.
@@ -152,6 +153,8 @@ type logEntry struct {
 	Status        string `json:"status"`
 	Error         string `json:"error,omitempty"`
 	Reason        string `json:"reason,omitempty"`
+	InputTokens   int64  `json:"input_tokens,omitempty"`
+	OutputTokens  int64  `json:"output_tokens,omitempty"`
 }
 
 // cliResult holds the text output from a CLI invocation.

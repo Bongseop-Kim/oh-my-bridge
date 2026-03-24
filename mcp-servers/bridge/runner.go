@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/exec"
 	"strings"
@@ -55,57 +54,6 @@ func runGemini(ctx context.Context, opts runOptions) (cliResult, error) {
 	}
 	result.Text = parseGeminiJSON(result.Text)
 	return result, nil
-}
-
-func runCodex(ctx context.Context, opts runOptions) (cliResult, error) {
-	// CreateTemp secures a unique path; we close immediately so Codex can write
-	// to it via -o, then defer removal for cleanup.
-	f, err := os.CreateTemp("", "bridge-codex-*.txt")
-	if err != nil {
-		return cliResult{}, err
-	}
-	f.Close() //nolint:errcheck,gosec
-	outputFile := f.Name()
-	defer os.Remove(outputFile) //nolint:errcheck
-
-	args := copyArgs(opts.ModelDef.Args)
-	args = append(args, "-o", outputFile, "--skip-git-repo-check")
-
-	if opts.BypassApprovals {
-		args = append(args, "--dangerously-bypass-approvals-and-sandbox")
-	}
-	if strings.TrimSpace(opts.ReasoningEffort) != "" {
-		args = append(args, "--config", "model_reasoning_effort="+opts.ReasoningEffort)
-	}
-	if strings.TrimSpace(opts.CWD) != "" {
-		args = append(args, "-C", opts.CWD)
-	}
-	args = append(args, opts.Prompt)
-
-	result, err := runCli(ctx, cliRequest{
-		Command:     opts.ModelDef.Command,
-		Args:        args,
-		CWD:         opts.CWD,
-		Timeout:     opts.Timeout,
-		OutputFile:  outputFile,
-		ErrorPrefix: "Codex CLI",
-	})
-	if err != nil {
-		return cliResult{}, err
-	}
-	if result.Text != "" {
-		return result, nil
-	}
-
-	data, readErr := os.ReadFile(outputFile) //nolint:gosec
-	if readErr == nil {
-		if text := strings.TrimSpace(string(data)); text != "" {
-			return cliResult{Text: text, StabilityExit: result.StabilityExit}, nil
-		}
-	}
-
-	log.Printf("runCodex: no output from stdout or output file %s; returning (done)", outputFile)
-	return cliResult{Text: "(done)", StabilityExit: result.StabilityExit}, nil
 }
 
 func runCli(parent context.Context, req cliRequest) (cliResult, error) {

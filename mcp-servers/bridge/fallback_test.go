@@ -10,14 +10,6 @@ import (
 	"testing"
 )
 
-// makeFakeCodex creates a fake "codex" binary in a temp dir and prepends that
-// dir to PATH so exec.LookPath finds it before any real codex installation.
-func makeFakeCodex(t *testing.T, exitCode int) {
-	t.Helper()
-	scriptPath := makeNamedExitScript(t, "codex", exitCode)
-	prependDirToPath(t, filepath.Dir(scriptPath))
-}
-
 func TestClassifyCliError_Timeout(t *testing.T) {
 	err := fmt.Errorf("wrap: %w", ErrTimeout)
 	got := classifyCliError(err)
@@ -47,12 +39,13 @@ func TestClassifyCliError_Crash(t *testing.T) {
 	}
 }
 
-// TestDelegateTool_CLIError_ReturnsClaude verifies that when a CLI exits with
-// a non-zero code the tool returns action="claude" with a cli_error reason
-// instead of propagating a hard error.
+// TestDelegateTool_CLIError_ReturnsClaude verifies that when the codex MCP server
+// returns an error response, delegateTool returns action="claude" with a cli_error
+// reason instead of propagating a hard error.
 func TestDelegateTool_CLIError_ReturnsClaude(t *testing.T) {
-	// Put a fake "codex" that exits 1 first in PATH so exec.LookPath finds it.
-	makeFakeCodex(t, 1)
+	// fake codex mcp server: IsError=true 응답 반환
+	serverBin := newFakeCodexMCPServer(t, "model error occurred", "", true)
+	codexClient := newCodexMCPClient(serverBin)
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -61,7 +54,7 @@ func TestDelegateTool_CLIError_ReturnsClaude(t *testing.T) {
 	testCfg := Config{
 		Routes: map[string]string{"quick": "fake-model"},
 		Models: map[string]ModelDef{
-			"fake-model": {Command: "codex", Args: []string{}},
+			"fake-model": {Command: cmdCodex, Args: []string{}},
 		},
 	}
 	writeTestConfig(t, home, testCfg)
@@ -73,7 +66,7 @@ func TestDelegateTool_CLIError_ReturnsClaude(t *testing.T) {
 	_, output, err := delegateTool(context.Background(), nil, delegateInput{
 		Prompt:   "test prompt",
 		Category: "quick",
-	})
+	}, codexClient)
 	if err != nil {
 		t.Fatalf("expected no error (fallback), got: %v", err)
 	}
@@ -83,19 +76,6 @@ func TestDelegateTool_CLIError_ReturnsClaude(t *testing.T) {
 	if !strings.HasPrefix(output.Reason, "cli_error") {
 		t.Errorf("expected reason to start with 'cli_error', got %q", output.Reason)
 	}
-}
-
-// makeArgsCaptureFakeCodex creates a fake "codex" script that writes all args to a file,
-// then returns the args file path for inspection.
-func makeArgsCaptureFakeCodex(t *testing.T, argsFile string) {
-	t.Helper()
-	dir := t.TempDir()
-	scriptPath := filepath.Join(dir, "codex")
-	content := fmt.Sprintf("#!/bin/sh\necho \"$*\" > %s\necho done\n", argsFile)
-	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil { //nolint:gosec
-		t.Fatalf("makeArgsCaptureFakeCodex: %v", err)
-	}
-	prependDirToPath(t, dir)
 }
 
 // makeArgsCaptureFakeGemini creates a fake "gemini" script that writes all args to a file
@@ -112,10 +92,11 @@ func makeArgsCaptureFakeGemini(t *testing.T, argsFile string) {
 }
 
 // TestDelegateTool_PromptAppend_Codex verifies that category_overrides.prompt_append
-// is appended to the prompt when routing to Codex.
+// is appended to the prompt when routing to Codex via MCP.
 func TestDelegateTool_PromptAppend_Codex(t *testing.T) {
-	argsFile := filepath.Join(t.TempDir(), "codex-args.txt")
-	makeArgsCaptureFakeCodex(t, argsFile)
+	captureFile := filepath.Join(t.TempDir(), "captured-prompt.txt")
+	serverBin := newFakeCodexMCPServer(t, "ok", captureFile, false)
+	codexClient := newCodexMCPClient(serverBin)
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -124,7 +105,7 @@ func TestDelegateTool_PromptAppend_Codex(t *testing.T) {
 	testCfg := Config{
 		Routes: map[string]string{"deep": "gpt-codex"},
 		Models: map[string]ModelDef{
-			"gpt-codex": {Command: "codex", Args: []string{}},
+			"gpt-codex": {Command: cmdCodex, Args: []string{}},
 		},
 		CategoryOverrides: map[string]CategoryOverride{
 			"deep": {PromptAppend: "APPEND_MARKER"},
@@ -139,16 +120,16 @@ func TestDelegateTool_PromptAppend_Codex(t *testing.T) {
 	_, _, err := delegateTool(context.Background(), nil, delegateInput{
 		Prompt:   "base prompt",
 		Category: "deep",
-	})
+	}, codexClient)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	argsData, readErr := os.ReadFile(argsFile) //nolint:gosec
+	data, readErr := os.ReadFile(captureFile) //nolint:gosec
 	if readErr != nil {
-		t.Fatalf("failed to read args file: %v", readErr)
+		t.Fatalf("failed to read capture file: %v", readErr)
 	}
-	if !strings.Contains(string(argsData), "APPEND_MARKER") {
-		t.Errorf("expected prompt_append 'APPEND_MARKER' in codex args, got: %q", string(argsData))
+	if !strings.Contains(string(data), "APPEND_MARKER") {
+		t.Errorf("expected prompt_append 'APPEND_MARKER' in captured prompt, got: %q", string(data))
 	}
 }
 
@@ -180,7 +161,7 @@ func TestDelegateTool_PromptAppend_Gemini(t *testing.T) {
 	_, _, err := delegateTool(context.Background(), nil, delegateInput{
 		Prompt:   "base prompt",
 		Category: "writing",
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -265,7 +246,7 @@ func TestDelegateTool_Gemini_StabilityExit_WarningBanner(t *testing.T) {
 		StabilityTimeoutMs:   2000,
 		FirstOutputTimeoutMs: 10000,
 		MaxTimeoutMs:         60000,
-	})
+	}, nil)
 
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
@@ -299,7 +280,7 @@ func TestDelegateTool_Gemini_StabilityExit_EmptyOutput(t *testing.T) {
 		StabilityTimeoutMs:   2000,
 		FirstOutputTimeoutMs: 10000,
 		MaxTimeoutMs:         60000,
-	})
+	}, nil)
 
 	if err != nil {
 		t.Fatalf("expected no error (fallback), got: %v", err)
@@ -311,77 +292,6 @@ func TestDelegateTool_Gemini_StabilityExit_EmptyOutput(t *testing.T) {
 		t.Errorf("expected reason to start with %q, got %q", reasonCLIErrorTimeout, output.Reason)
 	}
 	t.Logf("Gemini stderr-only → claude fallback, Reason: %q", output.Reason)
-}
-
-// TestDelegateTool_Codex_StabilityExit_OutputFileFallback verifies that when
-// Codex writes output to its -o file before stability fires, delegateTool
-// returns that file content with the warning banner prepended.
-func TestDelegateTool_Codex_StabilityExit_OutputFileFallback(t *testing.T) {
-	const fileContent = "codex result via output file"
-	makeFakeCodexInPath(t, fileContent, 2, 300, 30)
-
-	setupDelegateTool(t, Config{
-		Routes: map[string]string{"deep": "gpt-codex"},
-		Models: map[string]ModelDef{
-			"gpt-codex": {Command: "codex", Args: []string{}},
-		},
-	})
-
-	_, output, err := delegateTool(context.Background(), nil, delegateInput{
-		Prompt:               "test prompt",
-		Category:             "deep",
-		StabilityTimeoutMs:   2000,
-		FirstOutputTimeoutMs: 10000,
-		MaxTimeoutMs:         60000,
-	})
-
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	if !output.StabilityExit {
-		t.Error("expected StabilityExit = true")
-	}
-	if !strings.Contains(output.Response, fileContent) {
-		t.Errorf("expected output file content %q in response, got: %q", fileContent, output.Response)
-	}
-	if !strings.Contains(output.Response, "[WARNING: stability-exit") {
-		t.Errorf("expected warning banner in response, got: %q", output.Response)
-	}
-	t.Logf("Codex output-file fallback with banner: %q", output.Response[:min(100, len(output.Response))])
-}
-
-// TestDelegateTool_Codex_StabilityExit_AllEmpty verifies that when Codex
-// produces nothing on stdout or the output file, the first-output timeout fires
-// returning action="claude" with reason="cli_error_timeout".
-func TestDelegateTool_Codex_StabilityExit_AllEmpty(t *testing.T) {
-	// stderr progress only; no stdout; output file empty → first-output timeout → claude fallback.
-	makeFakeCodexInPath(t, "", 3, 200, 30)
-
-	setupDelegateTool(t, Config{
-		Routes: map[string]string{"deep": "gpt-codex"},
-		Models: map[string]ModelDef{
-			"gpt-codex": {Command: "codex", Args: []string{}},
-		},
-	})
-
-	_, output, err := delegateTool(context.Background(), nil, delegateInput{
-		Prompt:               "test prompt",
-		Category:             "deep",
-		StabilityTimeoutMs:   2000,
-		FirstOutputTimeoutMs: 10000,
-		MaxTimeoutMs:         60000,
-	})
-
-	if err != nil {
-		t.Fatalf("expected no error (fallback), got: %v", err)
-	}
-	if output.Action != "claude" {
-		t.Errorf("expected action=claude, got %q", output.Action)
-	}
-	if !strings.HasPrefix(output.Reason, reasonCLIErrorTimeout) {
-		t.Errorf("expected reason to start with %q, got %q", reasonCLIErrorTimeout, output.Reason)
-	}
-	t.Logf("Codex all-empty → claude fallback, Reason: %q", output.Reason)
 }
 
 // TestDelegateTool_UnsupportedCommand_HardError verifies that an unsupported
@@ -410,7 +320,7 @@ func TestDelegateTool_UnsupportedCommand_HardError(t *testing.T) {
 	_, _, err := delegateTool(context.Background(), nil, delegateInput{
 		Prompt:   "test prompt",
 		Category: "quick",
-	})
+	}, nil)
 	if err == nil {
 		t.Fatal("expected hard error for unsupported command, got nil")
 	}
