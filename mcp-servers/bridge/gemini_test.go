@@ -10,27 +10,60 @@ import (
 	"time"
 )
 
+// makeGeminiStreamScript creates a standalone shell script (full path returned)
+// that emits a valid stream-json response with the given content, then exits.
+func makeGeminiStreamScript(t *testing.T, content string) string {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "fake-gemini")
+	lines := "#!/bin/sh\n" +
+		"echo '{\"type\":\"init\",\"session_id\":\"test-sid\",\"model\":\"test\"}'\n" +
+		"echo '{\"type\":\"message\",\"role\":\"assistant\",\"content\":\"" + content + "\"}'\n" +
+		"echo '{\"type\":\"result\",\"status\":\"success\",\"stats\":{}}'\n"
+	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
+		t.Fatalf("makeGeminiStreamScript: %v", err)
+	}
+	return scriptPath
+}
+
+// makeGeminiStreamArgsEchoScript creates a standalone script that emits a valid
+// stream-json response where the content contains all CLI arguments.
+func makeGeminiStreamArgsEchoScript(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "fake-gemini")
+	content := `#!/bin/sh
+echo '{"type":"init","session_id":"test-sid","model":"test"}'
+printf '{"type":"message","role":"assistant","content":"%s"}\n' "$*"
+echo '{"type":"result","status":"success","stats":{}}'
+`
+	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil { //nolint:gosec
+		t.Fatalf("makeGeminiStreamArgsEchoScript: %v", err)
+	}
+	return scriptPath
+}
+
+func geminiOpts(t *testing.T, cmd string, to timeoutConfig) runOptions {
+	t.Helper()
+	return runOptions{
+		Prompt:   "test prompt",
+		CWD:      t.TempDir(),
+		ModelDef: ModelDef{Command: cmd, Args: []string{}},
+		Timeout:  to,
+	}
+}
+
 // TestRunGemini_FirstOutputTimeout verifies that runGemini returns ErrTimeout
-// when the Gemini CLI produces no output within FirstOutputTimeoutMs.
-// This is the core regression test for issue #10: a hanging CLI must be
-// detected early instead of waiting out the full MaxTimeoutMs.
+// when the process produces no stdout (no init event) within FirstOutputTimeoutMs.
 func TestRunGemini_FirstOutputTimeout(t *testing.T) {
 	fakeBin := makeSlowScript(t, 30) // hangs for 30s, no output
 
 	start := time.Now()
-	_, err := runGemini(context.Background(), runOptions{
-		Prompt: "test prompt",
-		CWD:    t.TempDir(),
-		ModelDef: ModelDef{
-			Command: fakeBin,
-			Args:    []string{},
-		},
-		Timeout: timeoutConfig{
-			MaxTimeoutMs:         60000,
-			FirstOutputTimeoutMs: 1500,
-			StabilityTimeoutMs:   2000,
-		},
-	})
+	_, err := runGemini(context.Background(), geminiOpts(t, fakeBin, timeoutConfig{
+		MaxTimeoutMs:         60000,
+		FirstOutputTimeoutMs: 1500,
+		StabilityTimeoutMs:   2000,
+	}), nil)
 	elapsed := time.Since(start)
 
 	if err == nil {
@@ -46,70 +79,26 @@ func TestRunGemini_FirstOutputTimeout(t *testing.T) {
 	t.Logf("Gemini first-output timeout in %v", elapsed)
 }
 
-// TestRunGemini_StabilityExit verifies that runGemini terminates via the
-// stability timeout after output goes quiet, returning StabilityExit: true.
-func TestRunGemini_StabilityExit(t *testing.T) {
-	// 3 chunks at 200ms intervals, then 30s sleep — stability kicks in after 2s quiet.
-	script := makeIncrementalOutputScript(t, 3, 200, 30)
+// TestRunGemini_StreamJSON_Success verifies that a valid stream-json response
+// is parsed and returned as a successful result without StabilityExit.
+func TestRunGemini_StreamJSON_Success(t *testing.T) {
+	script := makeGeminiStreamScript(t, "hello stream")
 
-	start := time.Now()
-	result, err := runGemini(context.Background(), runOptions{
-		Prompt: "test prompt",
-		CWD:    t.TempDir(),
-		ModelDef: ModelDef{
-			Command: script,
-			Args:    []string{},
-		},
-		Timeout: timeoutConfig{
-			MaxTimeoutMs:         60000,
-			FirstOutputTimeoutMs: 5000,
-			StabilityTimeoutMs:   2000,
-		},
-	})
-	elapsed := time.Since(start)
-
-	if err != nil {
-		t.Fatalf("expected success, got error: %v", err)
-	}
-	if !result.StabilityExit {
-		t.Error("expected StabilityExit = true, got false")
-	}
-	// Should finish in about 3s (600ms output + 2s stability window + polling slack).
-	if elapsed > 8*time.Second {
-		t.Errorf("took too long: %v (want < 8s)", elapsed)
-	}
-	t.Logf("Gemini stability exit in %v, output: %q", elapsed, result.Text)
-}
-
-// TestRunGemini_NaturalExit verifies that a fast-completing Gemini CLI process
-// succeeds immediately with StabilityExit = false.
-func TestRunGemini_NaturalExit(t *testing.T) {
-	script := makeIncrementalOutputScript(t, 3, 100, 0)
-
-	result, err := runGemini(context.Background(), runOptions{
-		Prompt: "test prompt",
-		CWD:    t.TempDir(),
-		ModelDef: ModelDef{
-			Command: script,
-			Args:    []string{},
-		},
-		Timeout: timeoutConfig{
-			MaxTimeoutMs:         60000,
-			FirstOutputTimeoutMs: 5000,
-			StabilityTimeoutMs:   5000,
-		},
-	})
+	result, err := runGemini(context.Background(), geminiOpts(t, script, timeoutConfig{
+		MaxTimeoutMs:         10000,
+		FirstOutputTimeoutMs: 5000,
+		StabilityTimeoutMs:   2000,
+	}), nil)
 
 	if err != nil {
 		t.Fatalf("expected success, got: %v", err)
 	}
 	if result.StabilityExit {
-		t.Error("expected StabilityExit = false for natural exit")
+		t.Error("expected StabilityExit = false for stream-json response")
 	}
-	if result.Text == "" {
-		t.Error("expected non-empty output")
+	if result.Text != "hello stream" {
+		t.Errorf("expected %q, got %q", "hello stream", result.Text)
 	}
-	t.Logf("Gemini natural exit, output: %q", result.Text)
 }
 
 // TestRunGemini_FastExit verifies that runGemini returns an error immediately
@@ -117,19 +106,11 @@ func TestRunGemini_NaturalExit(t *testing.T) {
 func TestRunGemini_FastExit(t *testing.T) {
 	fakeBin := makeFastExitScript(t, 1)
 
-	_, err := runGemini(context.Background(), runOptions{
-		Prompt: "test prompt",
-		CWD:    t.TempDir(),
-		ModelDef: ModelDef{
-			Command: fakeBin,
-			Args:    []string{},
-		},
-		Timeout: timeoutConfig{
-			MaxTimeoutMs:         5000,
-			FirstOutputTimeoutMs: 3000,
-			StabilityTimeoutMs:   2000,
-		},
-	})
+	_, err := runGemini(context.Background(), geminiOpts(t, fakeBin, timeoutConfig{
+		MaxTimeoutMs:         5000,
+		FirstOutputTimeoutMs: 3000,
+		StabilityTimeoutMs:   2000,
+	}), nil)
 
 	if err == nil {
 		t.Error("expected error from non-zero exit, got nil")
@@ -137,152 +118,38 @@ func TestRunGemini_FastExit(t *testing.T) {
 	t.Logf("Gemini fast-exit returned error immediately: %v", err)
 }
 
-// makeArgsEchoScript creates a shell script that echoes all its arguments to stdout.
-func makeArgsEchoScript(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	scriptPath := filepath.Join(dir, "args-echo-cli")
-	// Echo all args as JSON-like response so parseGeminiJSON passes through
-	content := "#!/bin/sh\necho '{\"response\": \"'\"$*\"'\"}'\n"
-	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil { //nolint:gosec
-		t.Fatalf("makeArgsEchoScript: %v", err)
-	}
-	return scriptPath
-}
+// TestRunGemini_ArgsContainFlags verifies that runGemini passes --approval-mode=yolo
+// and -o stream-json to the CLI.
+func TestRunGemini_ArgsContainFlags(t *testing.T) {
+	script := makeGeminiStreamArgsEchoScript(t)
 
-// TestRunGemini_ArgsContainApprovalMode verifies that runGemini passes
-// --approval-mode=yolo and --output-format json to the CLI.
-func TestRunGemini_ArgsContainApprovalMode(t *testing.T) {
-	fakeBin := makeArgsEchoScript(t)
-
-	result, err := runGemini(context.Background(), runOptions{
-		Prompt: "test prompt",
-		CWD:    t.TempDir(),
-		ModelDef: ModelDef{
-			Command: fakeBin,
-			Args:    []string{},
-		},
-		Timeout: timeoutConfig{
-			MaxTimeoutMs:         5000,
-			FirstOutputTimeoutMs: 3000,
-			StabilityTimeoutMs:   2000,
-		},
-	})
+	result, err := runGemini(context.Background(), geminiOpts(t, script, timeoutConfig{
+		MaxTimeoutMs:         10000,
+		FirstOutputTimeoutMs: 5000,
+		StabilityTimeoutMs:   2000,
+	}), nil)
 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// The script echoes all args; the raw output before parseGeminiJSON would contain the flags.
-	// Since the script wraps args in JSON, check that the response contains the flags.
 	if !strings.Contains(result.Text, "--approval-mode=yolo") {
 		t.Errorf("expected --approval-mode=yolo in args, got: %q", result.Text)
 	}
-	if !strings.Contains(result.Text, "--output-format json") {
-		t.Errorf("expected --output-format json in args, got: %q", result.Text)
+	if !strings.Contains(result.Text, "-o") || !strings.Contains(result.Text, "stream-json") {
+		t.Errorf("expected -o stream-json in args, got: %q", result.Text)
 	}
 }
 
-// TestParseGeminiJSON_Valid verifies that parseGeminiJSON extracts the response field.
-func TestParseGeminiJSON_Valid(t *testing.T) {
-	raw := `{"session_id":"abc","response":"hello world","stats":{}}`
-	got := parseGeminiJSON(raw)
-	if got != "hello world" {
-		t.Errorf("expected 'hello world', got %q", got)
-	}
-}
+// TestRunGemini_StderrOnlyActivity_FirstOutputTimeout verifies that stderr-only
+// output (no init event on stdout) results in firstOutputTimeout ErrTimeout.
+func TestRunGemini_StderrOnlyActivity_FirstOutputTimeout(t *testing.T) {
+	script := makeStderrOnlyScript(t, 5, 300, 30)
 
-// TestParseGeminiJSON_Invalid verifies that parseGeminiJSON falls back to raw text on parse failure.
-func TestParseGeminiJSON_Invalid(t *testing.T) {
-	raw := "not valid json"
-	got := parseGeminiJSON(raw)
-	if got != raw {
-		t.Errorf("expected raw fallback %q, got %q", raw, got)
-	}
-}
-
-// TestParseGeminiJSON_TruncatedJSON verifies that a truncated JSON string (parse
-// error) is returned as-is rather than causing a panic or empty result.
-func TestParseGeminiJSON_TruncatedJSON(t *testing.T) {
-	raw := `{"response": "hello wor`
-	got := parseGeminiJSON(raw)
-	if got != raw {
-		t.Errorf("expected raw fallback for truncated JSON, got %q", got)
-	}
-}
-
-// TestParseGeminiJSON_EmptyResponseField verifies that a valid JSON object with
-// an empty "response" field causes raw JSON to be returned (not the empty string).
-func TestParseGeminiJSON_EmptyResponseField(t *testing.T) {
-	raw := `{"session_id":"abc","response":"","stats":{}}`
-	got := parseGeminiJSON(raw)
-	if got != raw {
-		t.Errorf("expected raw JSON fallback for empty response field, got %q", got)
-	}
-}
-
-// TestParseGeminiJSON_NullResponseField verifies that a null "response" field
-// (which unmarshals to empty string in Go) causes raw JSON to be returned.
-func TestParseGeminiJSON_NullResponseField(t *testing.T) {
-	raw := `{"response":null}`
-	got := parseGeminiJSON(raw)
-	if got != raw {
-		t.Errorf("expected raw JSON fallback for null response field, got %q", got)
-	}
-}
-
-// TestRunGemini_StabilityExitPartialJSON verifies that when stability fires with
-// a truncated JSON string in the stdout buffer, parseGeminiJSON returns the raw
-// partial string (not an empty result or a panic).
-func TestRunGemini_StabilityExitPartialJSON(t *testing.T) {
-	// printf writes truncated JSON without trailing newline, then script sleeps.
-	// Stability fires after 2s, capturing whatever is in the stdout buffer.
-	const partialJSON = `{"response": "hello wor`
-	script := makePartialOutputScript(t, partialJSON, 30)
-
-	start := time.Now()
-	result, err := runGemini(context.Background(), runOptions{
-		Prompt: "test prompt",
-		CWD:    t.TempDir(),
-		ModelDef: ModelDef{
-			Command: script,
-			Args:    []string{},
-		},
-		Timeout: timeoutConfig{MaxTimeoutMs: 60000, FirstOutputTimeoutMs: 10000, StabilityTimeoutMs: 2000},
-	})
-	elapsed := time.Since(start)
-
-	if err != nil {
-		t.Fatalf("expected success (stability exit), got error: %v", err)
-	}
-	if !result.StabilityExit {
-		t.Error("expected StabilityExit = true")
-	}
-	// parseGeminiJSON falls back to raw on truncated input
-	if result.Text != partialJSON {
-		t.Errorf("expected raw truncated JSON %q, got: %q", partialJSON, result.Text)
-	}
-	if elapsed > 8*time.Second {
-		t.Errorf("took too long: %v (want < 8s)", elapsed)
-	}
-	t.Logf("partial-JSON stability exit in %v, text: %q", elapsed, result.Text)
-}
-
-// TestRunGemini_StderrOnlyActivity_EmptyResult verifies that the Gemini
-// stderr-only pattern (progress on stderr, no stdout JSON) results in
-// ErrTimeout — first-output timeout fires once stderr goes quiet.
-func TestRunGemini_StderrOnlyActivity_EmptyResult(t *testing.T) {
-	// Fake gemini: stderr progress only, no stdout JSON.
-	script := makeStderrOnlyScript(t, 5, 500, 30)
-
-	_, err := runGemini(context.Background(), runOptions{
-		Prompt: "test prompt",
-		CWD:    t.TempDir(),
-		ModelDef: ModelDef{
-			Command: script,
-			Args:    []string{},
-		},
-		Timeout: timeoutConfig{MaxTimeoutMs: 60000, FirstOutputTimeoutMs: 10000, StabilityTimeoutMs: 2000},
-	})
+	_, err := runGemini(context.Background(), geminiOpts(t, script, timeoutConfig{
+		MaxTimeoutMs:         60000,
+		FirstOutputTimeoutMs: 5000,
+		StabilityTimeoutMs:   2000,
+	}), nil)
 
 	if err == nil {
 		t.Fatal("expected ErrTimeout, got nil")
@@ -291,4 +158,90 @@ func TestRunGemini_StderrOnlyActivity_EmptyResult(t *testing.T) {
 		t.Errorf("expected ErrTimeout, got: %v", err)
 	}
 	t.Logf("stderr-only gemini first-output timeout: %v", err)
+}
+
+// TestRunGemini_MaxTimeout verifies that runGemini returns ErrTimeout when the
+// process exceeds MaxTimeoutMs even while writing output.
+func TestRunGemini_MaxTimeout(t *testing.T) {
+	// Script emits an init event then loops forever without a result event.
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "endless-gemini")
+	script := "#!/bin/sh\necho '{\"type\":\"init\",\"session_id\":\"x\",\"model\":\"test\"}'\nwhile true; do sleep 0.5; done\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0755); err != nil { //nolint:gosec
+		t.Fatalf("write script: %v", err)
+	}
+
+	start := time.Now()
+	_, err := runGemini(context.Background(), geminiOpts(t, scriptPath, timeoutConfig{
+		MaxTimeoutMs:         2000,
+		FirstOutputTimeoutMs: 10000,
+		StabilityTimeoutMs:   10000,
+	}), nil)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected ErrTimeout, got nil")
+	}
+	if !errors.Is(err, ErrTimeout) {
+		t.Errorf("expected ErrTimeout, got: %v", err)
+	}
+	if elapsed > 5*time.Second {
+		t.Errorf("took too long: %v (want < 5s)", elapsed)
+	}
+	t.Logf("Gemini max-timeout in %v: %v", elapsed, err)
+}
+
+// TestRunGemini_SessionID_Stored verifies that the session_id from the init event
+// is stored in the session store after a successful call.
+func TestRunGemini_SessionID_Stored(t *testing.T) {
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "fake-gemini")
+	script := "#!/bin/sh\n" +
+		"echo '{\"type\":\"init\",\"session_id\":\"my-uuid-42\",\"model\":\"test\"}'\n" +
+		"echo '{\"type\":\"message\",\"role\":\"assistant\",\"content\":\"ok\"}'\n" +
+		"echo '{\"type\":\"result\",\"status\":\"success\",\"stats\":{}}'\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0755); err != nil { //nolint:gosec
+		t.Fatalf("write script: %v", err)
+	}
+
+	sessions := newGeminiSessionStore()
+	cwd := t.TempDir()
+
+	_, err := runGemini(context.Background(), runOptions{
+		Prompt:   "hello",
+		CWD:      cwd,
+		ModelDef: ModelDef{Command: scriptPath, Args: []string{}},
+		Timeout:  timeoutConfig{MaxTimeoutMs: 10000, FirstOutputTimeoutMs: 5000, StabilityTimeoutMs: 2000},
+	}, sessions)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := sessions.get(cwd); got != "my-uuid-42" {
+		t.Errorf("expected session_id %q stored, got %q", "my-uuid-42", got)
+	}
+}
+
+// TestRunGemini_ErrorClearsSession verifies that a failed call clears any stored
+// session for that CWD to prevent reuse of a stale session.
+func TestRunGemini_ErrorClearsSession(t *testing.T) {
+	sessions := newGeminiSessionStore()
+	cwd := t.TempDir()
+	sessions.set(cwd, "stale-session")
+
+	fakeBin := makeFastExitScript(t, 1) // exits non-zero
+
+	_, err := runGemini(context.Background(), runOptions{
+		Prompt:   "hello",
+		CWD:      cwd,
+		ModelDef: ModelDef{Command: fakeBin, Args: []string{}},
+		Timeout:  timeoutConfig{MaxTimeoutMs: 5000, FirstOutputTimeoutMs: 3000, StabilityTimeoutMs: 2000},
+	}, sessions)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if got := sessions.get(cwd); got != "" {
+		t.Errorf("expected session cleared after error, got %q", got)
+	}
 }

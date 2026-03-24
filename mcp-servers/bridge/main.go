@@ -52,7 +52,7 @@ func main() {
 	availableCLIs = detectCLIs(cfg)
 
 	codexClient := newCodexMCPClient(cmdCodex)
-	defer codexClient.invalidate()
+	geminiSessions := newGeminiSessionStore()
 
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    serverName,
@@ -63,7 +63,7 @@ func main() {
 		Name:        "delegate",
 		Description: "Delegate a code generation task to the best available AI model.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, input delegateInput) (*mcp.CallToolResult, delegateOutput, error) {
-		return delegateTool(ctx, req, input, codexClient)
+		return delegateTool(ctx, req, input, codexClient, geminiSessions)
 	})
 
 	mcp.AddTool(server, &mcp.Tool{
@@ -72,6 +72,8 @@ func main() {
 	}, statusTool)
 
 	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
+		codexClient.invalidate()
 		log.Fatal(err)
 	}
+	codexClient.invalidate()
 }

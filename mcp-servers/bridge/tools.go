@@ -10,7 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInput, codexClient *codexMCPClient) (*mcp.CallToolResult, delegateOutput, error) {
+func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInput, codexClient *codexMCPClient, sessions *geminiSessionStore) (*mcp.CallToolResult, delegateOutput, error) {
 	// Reload config and CLI availability on each invocation to pick up runtime changes.
 	if err := reloadState(); err != nil {
 		return nil, delegateOutput{}, fmt.Errorf("config reload failed: %w", err)
@@ -105,7 +105,7 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 			CWD:      resolvedCwd,
 			ModelDef: modelDef,
 			Timeout:  timeout,
-		})
+		}, sessions)
 	default:
 		err = fmt.Errorf("%w: %q for model %q", ErrUnsupportedCommand, modelDef.Command, modelName)
 	}
