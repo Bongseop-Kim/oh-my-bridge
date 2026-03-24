@@ -149,23 +149,6 @@ func makeStderrThenStdoutScript(t *testing.T, stderrChunks, stderrIntervalMs, ga
 	return scriptPath
 }
 
-// makePartialOutputScript creates a script that writes `partialText` to stdout
-// without a trailing newline, then sleeps for `finalSleepSec` seconds.
-// Simulates a CLI that produces incomplete output before hanging.
-// partialText must not contain single quotes.
-func makePartialOutputScript(t *testing.T, partialText string, finalSleepSec int) string {
-	t.Helper()
-	dir := t.TempDir()
-	scriptPath := filepath.Join(dir, "partial-output-cli")
-	lines := "#!/bin/sh\n"
-	lines += fmt.Sprintf("printf '%%s' '%s'\n", escapeForSingleQuotedShell(partialText))
-	lines += "sleep " + strconv.Itoa(finalSleepSec) + "\n"
-	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
-		t.Fatalf("makePartialOutputScript: %v", err)
-	}
-	return scriptPath
-}
-
 // makeChildSpawningScript creates a script that emits `parentOutputChunks` lines
 // to stdout at `intervalMs` ms intervals, spawns a background `sleep 60` child,
 // then sleeps for `finalSleepSec` seconds.

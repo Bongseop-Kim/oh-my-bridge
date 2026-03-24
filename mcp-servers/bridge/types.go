@@ -6,6 +6,44 @@ import (
 	"time"
 )
 
+// geminiStreamEvent is a single JSONL event emitted by `gemini -o stream-json`.
+type geminiStreamEvent struct {
+	Type      string `json:"type"`
+	Role      string `json:"role"`
+	Content   string `json:"content"`
+	SessionID string `json:"session_id"`
+	Status    string `json:"status"`
+}
+
+// geminiSessionStore holds the last known session ID per working directory.
+// It is in-memory only and resets on bridge restart.
+type geminiSessionStore struct {
+	mu       sync.Mutex
+	sessions map[string]string
+}
+
+func newGeminiSessionStore() *geminiSessionStore {
+	return &geminiSessionStore{sessions: make(map[string]string)}
+}
+
+// get returns the stored session ID for the given cwd, or "" if none.
+func (s *geminiSessionStore) get(cwd string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.sessions[cwd]
+}
+
+// set stores (or clears, if id=="") the session ID for the given cwd.
+func (s *geminiSessionStore) set(cwd, id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if id == "" {
+		delete(s.sessions, cwd)
+	} else {
+		s.sessions[cwd] = id
+	}
+}
+
 const (
 	serverName                  = "oh-my-bridge"
 	serverVersion               = "2.4.5"

@@ -66,7 +66,7 @@ func TestDelegateTool_CLIError_ReturnsClaude(t *testing.T) {
 	_, output, err := delegateTool(context.Background(), nil, delegateInput{
 		Prompt:   "test prompt",
 		Category: "quick",
-	}, codexClient)
+	}, codexClient, nil)
 	if err != nil {
 		t.Fatalf("expected no error (fallback), got: %v", err)
 	}
@@ -79,12 +79,17 @@ func TestDelegateTool_CLIError_ReturnsClaude(t *testing.T) {
 }
 
 // makeArgsCaptureFakeGemini creates a fake "gemini" script that writes all args to a file
-// and returns a fake JSON response.
+// and returns a valid stream-json response.
 func makeArgsCaptureFakeGemini(t *testing.T, argsFile string) {
 	t.Helper()
 	dir := t.TempDir()
 	scriptPath := filepath.Join(dir, "gemini")
-	content := fmt.Sprintf("#!/bin/sh\necho \"$*\" > %s\necho '{\"response\": \"done\"}'\n", argsFile)
+	content := fmt.Sprintf(`#!/bin/sh
+echo "$*" > %s
+echo '{"type":"init","session_id":"test-session-id","model":"test"}'
+echo '{"type":"message","role":"assistant","content":"done"}'
+echo '{"type":"result","status":"success","stats":{}}'
+`, argsFile)
 	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil { //nolint:gosec
 		t.Fatalf("makeArgsCaptureFakeGemini: %v", err)
 	}
@@ -120,7 +125,7 @@ func TestDelegateTool_PromptAppend_Codex(t *testing.T) {
 	_, _, err := delegateTool(context.Background(), nil, delegateInput{
 		Prompt:   "base prompt",
 		Category: "deep",
-	}, codexClient)
+	}, codexClient, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -161,7 +166,7 @@ func TestDelegateTool_PromptAppend_Gemini(t *testing.T) {
 	_, _, err := delegateTool(context.Background(), nil, delegateInput{
 		Prompt:   "base prompt",
 		Category: "writing",
-	}, nil)
+	}, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -174,28 +179,25 @@ func TestDelegateTool_PromptAppend_Gemini(t *testing.T) {
 	}
 }
 
-// makeGeminiStabilityFakeScript creates a fake "gemini" binary in PATH that
-// outputs `chunks` lines at `intervalMs` ms intervals to stdout, then sleeps.
-// The stdout is non-JSON text; runGemini falls back to raw text on parse failure.
-func makeGeminiStabilityFakeScript(t *testing.T, chunks, intervalMs, finalSleepSec int) {
+// makeGeminiStreamFakeScript creates a fake "gemini" binary in PATH that emits
+// a valid stream-json response with the given content, then exits.
+func makeGeminiStreamFakeScript(t *testing.T, content string) {
 	t.Helper()
 	dir := t.TempDir()
 	scriptPath := filepath.Join(dir, "gemini")
-	lines := "#!/bin/sh\n"
-	for i := 0; i < chunks; i++ {
-		lines += fmt.Sprintf("echo chunk%d\n", i)
-		lines += fmt.Sprintf("sleep %.3f\n", float64(intervalMs)/1000.0)
-	}
-	lines += fmt.Sprintf("sleep %d\n", finalSleepSec)
+	lines := "#!/bin/sh\n" +
+		"echo '{\"type\":\"init\",\"session_id\":\"test-session-id\",\"model\":\"test\"}'\n" +
+		"echo '{\"type\":\"message\",\"role\":\"assistant\",\"content\":\"" + content + "\"}'\n" +
+		"echo '{\"type\":\"result\",\"status\":\"success\",\"stats\":{}}'\n"
 	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
-		t.Fatalf("makeGeminiStabilityFakeScript: %v", err)
+		t.Fatalf("makeGeminiStreamFakeScript: %v", err)
 	}
 	prependDirToPath(t, dir)
 }
 
 // makeGeminiStderrOnlyFakeScript creates a fake "gemini" binary in PATH that
 // writes `chunks` lines to stderr at `intervalMs` ms intervals, then sleeps.
-// No stdout is produced — simulates Gemini progress-only pattern.
+// No stdout is produced — simulates cold start where init event never arrives.
 func makeGeminiStderrOnlyFakeScript(t *testing.T, chunks, intervalMs, finalSleepSec int) {
 	t.Helper()
 	dir := t.TempDir()
@@ -226,12 +228,11 @@ func setupDelegateTool(t *testing.T, cfg Config) {
 	}
 }
 
-// TestDelegateTool_Gemini_StabilityExit_WarningBanner verifies that when Gemini
-// is terminated by the stability timeout, delegateTool sets StabilityExit=true
-// and prepends the warning banner to the response.
-func TestDelegateTool_Gemini_StabilityExit_WarningBanner(t *testing.T) {
-	// 3 stdout chunks (non-JSON) → stability exits → warning banner prepended.
-	makeGeminiStabilityFakeScript(t, 3, 200, 30)
+// TestDelegateTool_Gemini_StreamJSON_Success verifies that a valid stream-json
+// response is parsed correctly and returned as a successful response without
+// a stability-exit warning.
+func TestDelegateTool_Gemini_StreamJSON_Success(t *testing.T) {
+	makeGeminiStreamFakeScript(t, "hello from gemini")
 
 	setupDelegateTool(t, Config{
 		Routes: map[string]string{"quick": "gemini-flash"},
@@ -243,28 +244,26 @@ func TestDelegateTool_Gemini_StabilityExit_WarningBanner(t *testing.T) {
 	_, output, err := delegateTool(context.Background(), nil, delegateInput{
 		Prompt:               "test prompt",
 		Category:             "quick",
-		StabilityTimeoutMs:   2000,
 		FirstOutputTimeoutMs: 10000,
 		MaxTimeoutMs:         60000,
-	}, nil)
+	}, nil, newGeminiSessionStore())
 
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
-	if !output.StabilityExit {
-		t.Error("expected StabilityExit = true")
+	if output.StabilityExit {
+		t.Error("expected StabilityExit = false for stream-json response")
 	}
-	if !strings.Contains(output.Response, "[WARNING: stability-exit") {
-		t.Errorf("expected warning banner in response, got: %q", output.Response)
+	if !strings.Contains(output.Response, "hello from gemini") {
+		t.Errorf("expected response to contain content, got: %q", output.Response)
 	}
-	t.Logf("Gemini stability warning banner: %q", output.Response[:min(80, len(output.Response))])
 }
 
-// TestDelegateTool_Gemini_StabilityExit_EmptyOutput verifies that delegateTool
-// handles the stderr-only Gemini pattern: first-output timeout fires, returning
-// action="claude" with reason="cli_error_timeout".
-func TestDelegateTool_Gemini_StabilityExit_EmptyOutput(t *testing.T) {
-	// stderr progress only → empty stdout → first-output timeout → claude fallback.
+// TestDelegateTool_Gemini_FirstOutputTimeout_Claude verifies that when the init
+// event never arrives (stderr-only output), firstOutputTimeout fires and
+// delegateTool returns action="claude" with reason="cli_error_timeout".
+func TestDelegateTool_Gemini_FirstOutputTimeout_Claude(t *testing.T) {
+	// stderr progress only → no init event → firstOutputTimeout → claude fallback.
 	makeGeminiStderrOnlyFakeScript(t, 3, 200, 30)
 
 	setupDelegateTool(t, Config{
@@ -278,9 +277,9 @@ func TestDelegateTool_Gemini_StabilityExit_EmptyOutput(t *testing.T) {
 		Prompt:               "test prompt",
 		Category:             "quick",
 		StabilityTimeoutMs:   2000,
-		FirstOutputTimeoutMs: 10000,
+		FirstOutputTimeoutMs: 3000,
 		MaxTimeoutMs:         60000,
-	}, nil)
+	}, nil, nil)
 
 	if err != nil {
 		t.Fatalf("expected no error (fallback), got: %v", err)
@@ -320,11 +319,79 @@ func TestDelegateTool_UnsupportedCommand_HardError(t *testing.T) {
 	_, _, err := delegateTool(context.Background(), nil, delegateInput{
 		Prompt:   "test prompt",
 		Category: "quick",
-	}, nil)
+	}, nil, nil)
 	if err == nil {
 		t.Fatal("expected hard error for unsupported command, got nil")
 	}
 	if !errors.Is(err, ErrUnsupportedCommand) {
 		t.Errorf("expected ErrUnsupportedCommand, got: %v", err)
+	}
+}
+
+// makeGeminiArgsAndSessionFakeScript creates a fake "gemini" binary in PATH that:
+// - writes all args to argsFile
+// - emits a stream-json response with session_id=sessionID
+func makeGeminiArgsAndSessionFakeScript(t *testing.T, argsFile, sessionID string) {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "gemini")
+	content := fmt.Sprintf(`#!/bin/sh
+echo "$*" >> %s
+echo '{"type":"init","session_id":"%s","model":"test"}'
+echo '{"type":"message","role":"assistant","content":"ok"}'
+echo '{"type":"result","status":"success","stats":{}}'
+`, argsFile, sessionID)
+	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil { //nolint:gosec
+		t.Fatalf("makeGeminiArgsAndSessionFakeScript: %v", err)
+	}
+	prependDirToPath(t, dir)
+}
+
+// TestRunGemini_SessionID_StoredAndResumed verifies that after a successful call
+// the session_id from the init event is stored, and the next call with the same
+// CWD includes --resume <sessionID> in the arguments.
+func TestRunGemini_SessionID_StoredAndResumed(t *testing.T) {
+	argsFile := filepath.Join(t.TempDir(), "gemini-args.txt")
+	makeGeminiArgsAndSessionFakeScript(t, argsFile, "test-uuid-1234")
+
+	cwd := t.TempDir()
+	sessions := newGeminiSessionStore()
+	opts := runOptions{
+		Prompt:   "hello",
+		CWD:      cwd,
+		ModelDef: ModelDef{Command: "gemini", Args: []string{}},
+		Timeout: timeoutConfig{
+			MaxTimeoutMs:         10000,
+			FirstOutputTimeoutMs: 5000,
+			StabilityTimeoutMs:   2000,
+		},
+	}
+
+	// First call: no --resume, session stored after success.
+	_, err := runGemini(context.Background(), opts, sessions)
+	if err != nil {
+		t.Fatalf("first call: unexpected error: %v", err)
+	}
+	if got := sessions.get(cwd); got != "test-uuid-1234" {
+		t.Errorf("expected session_id %q stored, got %q", "test-uuid-1234", got)
+	}
+
+	// Second call: --resume test-uuid-1234 must appear in captured args.
+	_, err = runGemini(context.Background(), opts, sessions)
+	if err != nil {
+		t.Fatalf("second call: unexpected error: %v", err)
+	}
+	data, readErr := os.ReadFile(argsFile) //nolint:gosec
+	if readErr != nil {
+		t.Fatalf("read args file: %v", readErr)
+	}
+	// argsFile contains two lines (one per call). Second line should have --resume.
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected 2 lines in args file, got %d: %q", len(lines), string(data))
+	}
+	secondCallArgs := lines[1]
+	if !strings.Contains(secondCallArgs, "--resume") || !strings.Contains(secondCallArgs, "test-uuid-1234") {
+		t.Errorf("expected --resume test-uuid-1234 in second call args, got: %q", secondCallArgs)
 	}
 }
