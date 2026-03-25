@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -189,9 +190,13 @@ func makeGeminiStreamFakeScript(t *testing.T, content string) {
 	t.Helper()
 	dir := t.TempDir()
 	scriptPath := filepath.Join(dir, "gemini")
+	escapedContent, err := json.Marshal(content)
+	if err != nil {
+		t.Fatalf("makeGeminiStreamFakeScript: marshal content: %v", err)
+	}
 	lines := "#!/bin/sh\n" +
 		"echo '{\"type\":\"init\",\"session_id\":\"test-session-id\",\"model\":\"test\"}'\n" +
-		"echo '{\"type\":\"message\",\"role\":\"assistant\",\"content\":\"" + content + "\"}'\n" +
+		"echo '{\"type\":\"message\",\"role\":\"assistant\",\"content\":" + string(escapedContent) + "}'\n" +
 		"echo '{\"type\":\"result\",\"status\":\"success\",\"stats\":{}}'\n"
 	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
 		t.Fatalf("makeGeminiStreamFakeScript: %v", err)
