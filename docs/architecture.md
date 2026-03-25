@@ -15,43 +15,61 @@ Claude Code는 MCP 서버를 **세션 시작 시 한 번만 spawn**하고 세션
 ```text
 Claude Code --(persistent stdio)--> MCP bridge server (Go binary)
                                           |
-                                          +--(per-call exec)--> codex CLI
-                                          +--(per-call exec)--> gemini CLI
+                                          +--(persistent MCP session)--> codex mcp-server
+                                          +--(per-call exec)-----------> gemini CLI
 ```
 
 ### oh-my-bridge의 지연 원인
 
-지연은 **MCP 서버 프로세스 재시작이 아니라**, bridge 서버 내부에서 Codex/Gemini CLI를 매번 `exec`으로 실행하고 LLM API 왕복이 추가되기 때문이다.
+지연은 **MCP 서버 프로세스 재시작이 아니라**, bridge 서버 내부에서 Gemini CLI를 매번 `exec`으로 실행하고 LLM API 왕복이 추가되기 때문이다. Codex는 `codex mcp-server` 영구 세션을 통해 콜드 스타트가 제거됐다.
 
-| 단계                           | 소요 시간  | 설명             |
-| ------------------------------ | ---------- | ---------------- |
-| Go 바이너리 cold start         | ~3ms       | 세션 시작 시 1회 |
-| Codex/Gemini CLI exec          | ~5s        | 매 툴 호출마다   |
-| LLM API 왕복 (file write 기준) | +15–20s    | 매 툴 호출마다   |
-| **합계 (파일 생성 기준)**      | **20–30s** |                  |
-| Claude 네이티브 Write/Edit     | ~7s        | MCP 없음         |
+| 단계                           | 소요 시간  | 설명                               |
+| ------------------------------ | ---------- | ---------------------------------- |
+| Go 바이너리 cold start         | ~3ms       | 세션 시작 시 1회                   |
+| codex mcp-server 기동          | ~5s        | 세션 시작 시 1회 (이후 재사용)     |
+| Gemini CLI exec                | ~2s        | 매 툴 호출마다 (init 이벤트까지)   |
+| LLM API 왕복 (file write 기준) | +15–20s    | 매 툴 호출마다                     |
+| **합계 (파일 생성 기준)**      | **17–22s** |                                    |
+| Claude 네이티브 Write/Edit     | ~7s        | MCP 없음                           |
 
 단순 편집에 MCP를 거치지 않는 이유가 여기 있다.
 
-### CLI 실행 전략: Polling + Stability
+### CLI 실행 전략: Stream-JSON + Result Event (Gemini 전용)
 
-CLI 프로세스는 자연 종료를 보장하지 않는다. Codex/Gemini는 작업을 마친 뒤에도 프롬프트 대기 상태로 멈출 수 있다. `runCli`는 두 전략으로 이를 처리한다.
+Gemini CLI는 `--output-format json` 모드에서 LLM 응답이 완성될 때까지 stdout에 아무것도 출력하지 않는다. 이 침묵 구간이 `firstOutputTimeoutMs`(30s)를 초과하면 타임아웃 폴백이 발동했다.
 
-**Polling** — `time.NewTicker(stabilityPollIntervalMs)` 로 주기적으로 `activityTracker`의 마지막 출력 시각을 확인한다. Codex의 `-o` 출력 파일 mtime도 함께 폴링해 파일 쓰기 활동을 감지한다.
+**해결책: `-o stream-json` 전환 (2026.03)**
 
-**Stability timeout** — 마지막 활동으로부터 `StabilityTimeoutMs`이 경과하면 "출력이 안정됐다 = 작업 완료"로 판단하고 프로세스를 강제 종료, `StabilityExit: true` 를 반환한다.
+`-o stream-json` 모드는 JSONL 이벤트 스트림을 출력한다:
 
-타임아웃은 3단계로 구성된다:
+```jsonl
+{"type":"init","session_id":"<UUID>","model":"..."}   ← 프로세스 시작 후 즉시
+{"type":"message","role":"assistant","content":"...","delta":true}
+{"type":"result","status":"success","stats":{...}}    ← 완료 신호
+```
 
-| 단계         | 설정 키                | 기본값     | 조건                        | 결과                         |
-| ------------ | ---------------------- | ---------- | --------------------------- | ---------------------------- |
-| First-output | `FirstOutputTimeoutMs` | 30s        | 시작 후 첫 출력이 없는 경우 | `ErrTimeout` (에러)          |
-| Stability    | `StabilityTimeoutMs`   | 10s        | 출력 후 조용해진 경우       | `StabilityExit: true` (정상) |
-| Max ceiling  | `MaxTimeoutMs`         | 30min      | 절대 상한 초과              | `ErrTimeout` (에러)          |
+- `init` 이벤트가 1–2초 내 stdout에 도달 → `lastStdout` 갱신 → `firstOutputTimeout` 미발동
+- `result` 이벤트가 공식 완료 신호 → stability timeout 휴리스틱 불필요
 
-폴링 간격: `stabilityPollIntervalMs` = 1s (고정값, config 불가). stability 감지의 정밀도는 ±1s인데, `StabilityTimeoutMs` 기본값이 10s이므로 오차가 행동에 영향을 주지 않는다. 폴링 간격은 사용자가 조정할 필요가 없는 내부 구현 세부사항이므로 config에 노출하지 않았다.
+타임아웃은 2단계로 단순화됐다:
 
-`StabilityExit: true` 반환 시 출력이 불완전할 수 있으므로 MCP Content 앞에 경고 prefix를 자동 삽입한다 (→ [섹션 5](#5-fallback-전략) 참조).
+| 단계         | 설정 키                | 기본값  | 조건                                       | 결과                |
+| ------------ | ---------------------- | ------- | ------------------------------------------ | ------------------- |
+| First-output | `FirstOutputTimeoutMs` | 30s     | `init` 이벤트 미도달 + alive 신호 없을 때 | `ErrTimeout` (에러) |
+| Max ceiling  | `MaxTimeoutMs`         | 30min   | 절대 상한 초과                             | `ErrTimeout` (에러) |
+
+Stability timeout은 Gemini에서 더 이상 사용되지 않는다. `runCli`의 stability 로직은 미래 CLI 통합을 위해 보존되어 있다.
+
+### Gemini 세션 ID 저장 (`geminiSessionStore`)
+
+`-o stream-json`의 `init` 이벤트에서 `session_id`(UUID)를 추출해 CWD별 in-memory 맵에 저장한다. 다음 호출 시 동일 CWD라면 `--resume <UUID>`를 자동으로 추가한다.
+
+- **이점**: Gemini가 이전 대화 컨텍스트를 복원 → 프로젝트 재설명 비용 제거
+- **에러 시**: 해당 CWD의 세션 ID 삭제 → 다음 호출은 fresh session
+- **재시작 시**: in-memory이므로 리셋. 콜드 스타트 회피는 아니지만 컨텍스트 연속성 확보
+- **session_id 공식 지원**: gemini-cli PR #14504 (2025-12-04 merged)로 공식 노출됨
+
+`StabilityExit: true` 반환은 Gemini에서 더 이상 발생하지 않는다.
 
 ---
 
@@ -114,25 +132,25 @@ cold start 차이(800ms vs 3ms)는 세션 시작 시 1회만 발생하므로 체
 
 ## 4. CLI vs MCP 설계 검토 (2026.03)
 
-현재 bridge는 외부 모델을 **CLI로 호출**한다. MCP로 전환하는 방안을 검토했고, 그 결과를 기록한다.
+bridge의 외부 모델 호출 방식에 대한 검토 기록. **Codex는 MCP 전환 완료, Gemini는 CLI 유지.**
 
-### 현재 구조
+### 현재 구조 (2026.03 기준)
 
 ```text
 Claude Code
   └── bridge MCP (Go 바이너리)
-        └── codex --full-auto  (CLI exec)
-        └── gemini --yolo      (CLI exec)
+        └── codex mcp-server  (JSON-RPC 영구 세션) ← MCP 전환 완료
+        └── gemini --yolo     (CLI exec)            ← CLI 유지
 ```
 
-### MCP 전환 시 구조
+### Gemini MCP 전환 시 예상 구조
 
-Codex는 `codex-mcp-server`를 공식 제공한다. Gemini는 커뮤니티 MCP 서버가 있으며 내부적으로 CLI를 subprocess로 호출한다.
+Gemini는 커뮤니티 MCP 서버가 있으며 내부적으로 CLI를 subprocess로 호출한다.
 
 ```text
 Claude Code
   └── bridge MCP (Go 바이너리)
-        └── codex-mcp-server  (JSON-RPC)
+        └── codex mcp-server  (JSON-RPC 영구 세션)
         └── gemini-mcp-server (JSON-RPC → CLI subprocess)
 ```
 
@@ -158,9 +176,11 @@ TES(Tool Execution Score): 코딩 에이전트 벤치마크에서 툴 실행 성
 
 **반면 CLI가 우위인 항목도 명확하다.** 토큰 효율(33% 우위), 보안(MCP 아키텍처 자체의 공격 증폭 특성), 디버깅 단순성.
 
-현재 oh-my-bridge의 사용 패턴(단발성 코드 생성 위임)에서는 멀티턴 이점이 크지 않다. 다음 기준 중 하나를 충족하면 전환을 재검토한다:
+**Codex 전환 결과 (2026.03):** `codex mcp-server` 영구 세션 도입으로 콜드 스타트 제거. `developer-instructions` per-category 주입 지원 추가. 멀티턴(`threadId` 기반)은 현재 미지원 — bridge가 stateless 단일 요청 구조이므로 향후 별도 구현 필요.
 
-- bridge에서 CLI 변경 대응 커밋이 **분기당 3회 이상** 발생
+**Gemini MCP 전환은 보류.** 공식 Gemini MCP 서버가 없고, 현재 사용 패턴에서 멀티턴 이점이 크지 않다. 다음 기준 충족 시 재검토:
+
+- bridge에서 Gemini CLI 변경 대응 커밋이 **분기당 3회 이상** 발생
 - 단일 위임 작업이 **멀티턴 컨텍스트를 필요**로 하는 사례가 반복
 
 ---

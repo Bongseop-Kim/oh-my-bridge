@@ -10,7 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInput) (*mcp.CallToolResult, delegateOutput, error) {
+func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInput, codexClient *codexMCPClient, sessions *geminiSessionStore) (*mcp.CallToolResult, delegateOutput, error) {
 	// Reload config and CLI availability on each invocation to pick up runtime changes.
 	if err := reloadState(); err != nil {
 		return nil, delegateOutput{}, fmt.Errorf("config reload failed: %w", err)
@@ -81,7 +81,7 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 		return nil, delegateOutput{}, err
 	}
 
-	reasoningEffort, promptAppend := resolveCategoryOverrides(input.Category, input, modelDef, c.CategoryOverrides)
+	reasoningEffort, promptAppend, developerInstructions := resolveCategoryOverrides(input.Category, input, modelDef, c.CategoryOverrides)
 	finalPrompt := input.Prompt
 	if promptAppend != "" {
 		finalPrompt = input.Prompt + "\n\n" + promptAppend
@@ -91,21 +91,21 @@ func delegateTool(ctx context.Context, _ *mcp.CallToolRequest, input delegateInp
 	var result cliResult
 	switch modelDef.Command {
 	case cmdCodex:
-		result, err = runCodex(ctx, runOptions{
+		result, err = callCodexMCP(ctx, codexClient, runOptions{
 			Prompt:          finalPrompt,
 			CWD:             resolvedCwd,
 			ModelDef:        modelDef,
 			ReasoningEffort: reasoningEffort,
 			BypassApprovals: input.BypassApprovals,
 			Timeout:         timeout,
-		})
+		}, developerInstructions)
 	case cmdGemini:
 		result, err = runGemini(ctx, runOptions{
 			Prompt:   finalPrompt,
 			CWD:      resolvedCwd,
 			ModelDef: modelDef,
 			Timeout:  timeout,
-		})
+		}, sessions)
 	default:
 		err = fmt.Errorf("%w: %q for model %q", ErrUnsupportedCommand, modelDef.Command, modelName)
 	}

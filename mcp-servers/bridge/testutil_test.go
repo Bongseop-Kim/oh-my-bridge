@@ -24,6 +24,17 @@ func prependDirToPath(t *testing.T, dir string) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
+func makeNamedProxyScript(t *testing.T, name, target string) string {
+	t.Helper()
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, name)
+	content := fmt.Sprintf("#!/bin/sh\nexec '%s' \"$@\"\n", escapeForSingleQuotedShell(target))
+	if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil { //nolint:gosec
+		t.Fatalf("makeNamedProxyScript: %v", err)
+	}
+	return scriptPath
+}
+
 // makeSlowScript creates a shell script that sleeps for the given number of seconds.
 // Useful for testing timeout behaviour and first-output-timeout (no output produced).
 func makeSlowScript(t *testing.T, seconds int) string {
@@ -149,23 +160,6 @@ func makeStderrThenStdoutScript(t *testing.T, stderrChunks, stderrIntervalMs, ga
 	return scriptPath
 }
 
-// makePartialOutputScript creates a script that writes `partialText` to stdout
-// without a trailing newline, then sleeps for `finalSleepSec` seconds.
-// Simulates a CLI that produces incomplete output before hanging.
-// partialText must not contain single quotes.
-func makePartialOutputScript(t *testing.T, partialText string, finalSleepSec int) string {
-	t.Helper()
-	dir := t.TempDir()
-	scriptPath := filepath.Join(dir, "partial-output-cli")
-	lines := "#!/bin/sh\n"
-	lines += fmt.Sprintf("printf '%%s' '%s'\n", escapeForSingleQuotedShell(partialText))
-	lines += "sleep " + strconv.Itoa(finalSleepSec) + "\n"
-	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
-		t.Fatalf("makePartialOutputScript: %v", err)
-	}
-	return scriptPath
-}
-
 // makeChildSpawningScript creates a script that emits `parentOutputChunks` lines
 // to stdout at `intervalMs` ms intervals, spawns a background `sleep 60` child,
 // then sleeps for `finalSleepSec` seconds.
@@ -242,54 +236,6 @@ func makeOutputFileOnlyScriptWithRepeats(
 		t.Fatalf("makeOutputFileOnlyScriptWithRepeats: %v", err)
 	}
 	return scriptPath
-}
-
-// makeFakeCodexScript creates a fake codex-compatible binary that parses the
-// output file path from the -o argument, writes stderr progress chunks, then
-// optionally writes `fileContent` to that output file before sleeping.
-// `binaryName` controls the created executable name.
-func makeFakeCodexScript(
-	t *testing.T,
-	binaryName, fileContent string,
-	stderrChunks, stderrIntervalMs, finalSleepSec int,
-) string {
-	t.Helper()
-	dir := t.TempDir()
-	scriptPath := filepath.Join(dir, binaryName)
-
-	lines := `#!/bin/sh
-prev=""
-outfile=""
-for arg in "$@"; do
-    if [ "$prev" = "-o" ]; then
-        outfile="$arg"
-        break
-    fi
-    prev="$arg"
-done
-`
-	for i := 0; i < stderrChunks; i++ {
-		lines += fmt.Sprintf("echo progress%d >&2\n", i)
-		lines += fmt.Sprintf("sleep %.3f\n", float64(stderrIntervalMs)/1000.0)
-	}
-	if fileContent != "" {
-		lines += fmt.Sprintf("[ -n \"$outfile\" ] && printf '%%s\\n' '%s' > \"$outfile\"\n", escapeForSingleQuotedShell(fileContent))
-	}
-	lines += fmt.Sprintf("sleep %d\n", finalSleepSec)
-
-	if err := os.WriteFile(scriptPath, []byte(lines), 0755); err != nil { //nolint:gosec
-		t.Fatalf("makeFakeCodexScript: %v", err)
-	}
-	return scriptPath
-}
-
-// makeFakeCodexInPath creates a fake "codex" binary in PATH that parses -o and
-// optionally writes fileContent to the output file. Mirrors makeFakeCodex but
-// for the output-file pattern used by Codex integration tests.
-func makeFakeCodexInPath(t *testing.T, fileContent string, stderrChunks, intervalMs, finalSleepSec int) {
-	t.Helper()
-	scriptPath := makeFakeCodexScript(t, "codex", fileContent, stderrChunks, intervalMs, finalSleepSec)
-	prependDirToPath(t, filepath.Dir(scriptPath))
 }
 
 func TestMakeOutputFileOnlyScript(t *testing.T) {

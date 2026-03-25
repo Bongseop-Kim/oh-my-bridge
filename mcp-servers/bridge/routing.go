@@ -42,15 +42,16 @@ func resolveModel(category, modelOverride string, c Config, clis map[string]bool
 	return routeVal, d, false, "", nil
 }
 
-// resolveCategoryOverrides returns the effective reasoningEffort and promptAppend
+// resolveCategoryOverrides returns the effective reasoningEffort, promptAppend, and developerInstructions
 // for a given category. Priority: per-call input > category_overrides > ModelDef default.
-func resolveCategoryOverrides(category string, input delegateInput, modelDef ModelDef, overrides map[string]CategoryOverride) (reasoningEffort, promptAppend string) {
+func resolveCategoryOverrides(category string, input delegateInput, modelDef ModelDef, overrides map[string]CategoryOverride) (reasoningEffort, promptAppend, developerInstructions string) {
 	reasoningEffort = modelDef.ReasoningEffort
 	if co, ok := overrides[category]; ok {
 		if co.ReasoningEffort != "" {
 			reasoningEffort = co.ReasoningEffort
 		}
 		promptAppend = co.PromptAppend
+		developerInstructions = co.DeveloperInstructions
 	}
 	if input.ReasoningEffort != "" {
 		reasoningEffort = input.ReasoningEffort

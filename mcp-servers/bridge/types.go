@@ -6,6 +6,44 @@ import (
 	"time"
 )
 
+// geminiStreamEvent is a single JSONL event emitted by `gemini -o stream-json`.
+type geminiStreamEvent struct {
+	Type      string `json:"type"`
+	Role      string `json:"role"`
+	Content   string `json:"content"`
+	SessionID string `json:"session_id"`
+	Status    string `json:"status"`
+}
+
+// geminiSessionStore holds the last known session ID per working directory.
+// It is in-memory only and resets on bridge restart.
+type geminiSessionStore struct {
+	mu       sync.Mutex
+	sessions map[string]string
+}
+
+func newGeminiSessionStore() *geminiSessionStore {
+	return &geminiSessionStore{sessions: make(map[string]string)}
+}
+
+// get returns the stored session ID for the given cwd, or "" if none.
+func (s *geminiSessionStore) get(cwd string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.sessions[cwd]
+}
+
+// set stores (or clears, if id=="") the session ID for the given cwd.
+func (s *geminiSessionStore) set(cwd, id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if id == "" {
+		delete(s.sessions, cwd)
+	} else {
+		s.sessions[cwd] = id
+	}
+}
+
 const (
 	serverName                  = "oh-my-bridge"
 	serverVersion               = "2.4.5"
@@ -25,8 +63,9 @@ type Config struct {
 
 // CategoryOverride holds per-category settings that override ModelDef defaults.
 type CategoryOverride struct {
-	ReasoningEffort string `json:"reasoning_effort,omitempty"`
-	PromptAppend    string `json:"prompt_append,omitempty"`
+	ReasoningEffort       string `json:"reasoning_effort,omitempty"`
+	PromptAppend          string `json:"prompt_append,omitempty"`
+	DeveloperInstructions string `json:"developer_instructions,omitempty"`
 }
 
 // ModelDef describes how to invoke a specific model via CLI.
@@ -152,6 +191,8 @@ type logEntry struct {
 	Status        string `json:"status"`
 	Error         string `json:"error,omitempty"`
 	Reason        string `json:"reason,omitempty"`
+	InputTokens   int64  `json:"input_tokens,omitempty"`
+	OutputTokens  int64  `json:"output_tokens,omitempty"`
 }
 
 // cliResult holds the text output from a CLI invocation.
