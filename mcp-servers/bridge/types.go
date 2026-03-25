@@ -46,7 +46,7 @@ func (s *geminiSessionStore) set(cwd, id string) {
 
 const (
 	serverName                  = "oh-my-bridge"
-	serverVersion               = "2.4.5"
+	serverVersion               = "2.4.6"
 	defaultMaxTimeoutMs         = 1800000 // 30 minutes
 	defaultFirstOutputTimeoutMs = 30000   // 30 seconds
 	defaultStabilityTimeoutMs   = 10000   // 10 seconds
